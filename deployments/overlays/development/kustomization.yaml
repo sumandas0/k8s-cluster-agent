@@ -5,7 +5,7 @@ bases:
   - ../../base
 
 patchesStrategicMerge:
-  - deployment-patch.yaml
+  - daemonset-patch.yaml
 
 configMapGenerator:
   - name: k8s-cluster-agent-config

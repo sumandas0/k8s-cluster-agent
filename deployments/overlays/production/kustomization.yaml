@@ -5,8 +5,7 @@ bases:
   - ../../base
 
 resources:
-  - hpa.yaml
   - networkpolicy.yaml
 
-patchesStrategicMerge:
-  - deployment-patch.yaml 
+# Note: HPA removed as DaemonSets don't support horizontal pod autoscaling
+# DaemonSets automatically run one pod per node 

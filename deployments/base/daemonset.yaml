@@ -1,12 +1,11 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: k8s-cluster-agent
   namespace: k8s-cluster-agent
   labels:
     app: k8s-cluster-agent
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: k8s-cluster-agent
@@ -20,6 +19,14 @@ spec:
         runAsNonRoot: true
         runAsUser: 65534
         fsGroup: 65534
+      # Tolerations to ensure the agent can run on all nodes including master nodes
+      tolerations:
+      - key: node-role.kubernetes.io/control-plane
+        operator: Exists
+        effect: NoSchedule
+      - key: node-role.kubernetes.io/master
+        operator: Exists
+        effect: NoSchedule
       containers:
       - name: agent
         image: ghcr.io/sumandas0/k8s-cluster-agent:main-131dc4e
@@ -35,6 +42,11 @@ spec:
           value: "json"
         - name: PORT
           value: "8080"
+        # Add node name as environment variable for better logging
+        - name: NODE_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: spec.nodeName
         resources:
           requests:
             cpu: 50m
@@ -46,16 +58,16 @@ spec:
           httpGet:
             path: /healthz
             port: http
-          initialDelaySeconds: 100
-          periodSeconds: 100
+          initialDelaySeconds: 30
+          periodSeconds: 30
           timeoutSeconds: 5
           failureThreshold: 3
         readinessProbe:
           httpGet:
             path: /readyz
             port: http
-          initialDelaySeconds: 100
-          periodSeconds: 100
+          initialDelaySeconds: 10
+          periodSeconds: 10
           timeoutSeconds: 3
           failureThreshold: 3
         securityContext:

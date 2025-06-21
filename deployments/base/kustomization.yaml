@@ -6,7 +6,7 @@ resources:
   - serviceaccount.yaml
   - clusterrole.yaml
   - clusterrolebinding.yaml
-  - deployment.yaml
+  - daemonset.yaml
   - service.yaml
 
 commonLabels:

@@ -22,6 +22,9 @@ type Config struct {
 	// Kubernetes
 	K8sTimeout time.Duration `env:"K8S_TIMEOUT" default:"30s"`
 
+	// Node information (for DaemonSet deployment)
+	NodeName string `env:"NODE_NAME" default:""`
+
 	// Feature flags
 	EnableMetrics bool `env:"ENABLE_METRICS" default:"true"`
 }
@@ -36,6 +39,7 @@ func Load() (*Config, error) {
 		LogLevel:        getEnv("LOG_LEVEL", "info"),
 		LogFormat:       getEnv("LOG_FORMAT", "json"),
 		K8sTimeout:      getEnvAsDuration("K8S_TIMEOUT", 30*time.Second),
+		NodeName:        getEnv("NODE_NAME", ""),
 		EnableMetrics:   getEnvAsBool("ENABLE_METRICS", true),
 	}
 

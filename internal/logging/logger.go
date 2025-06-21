@@ -24,7 +24,14 @@ func NewLogger(cfg *config.Config) *slog.Logger {
 		handler = slog.NewJSONHandler(os.Stdout, opts)
 	}
 
-	return slog.New(handler)
+	logger := slog.New(handler)
+
+	// Add node name as default attribute if running in DaemonSet mode
+	if cfg.NodeName != "" {
+		logger = logger.With("node", cfg.NodeName)
+	}
+
+	return logger
 }
 
 // parseLevel converts string log level to slog.Level

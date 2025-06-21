@@ -1,10 +1,9 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: DaemonSet
 metadata:
   name: k8s-cluster-agent
   namespace: k8s-cluster-agent
 spec:
-  replicas: 1
   template:
     spec:
       containers:
@@ -17,7 +16,7 @@ spec:
         resources:
           requests:
             cpu: 100m
-            memory: 320Mi
+            memory: 128Mi
           limits:
-            cpu: 500m
-            memory: 640Mi 
+            cpu: 200m
+            memory: 256Mi 
