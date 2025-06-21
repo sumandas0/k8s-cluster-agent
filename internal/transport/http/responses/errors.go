@@ -2,6 +2,7 @@ package responses
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"time"
 )
@@ -34,7 +35,10 @@ func WriteError(w http.ResponseWriter, statusCode int, code, message, details st
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		// Log error but response is already written partially
+		slog.Error("failed to encode error response", "error", err)
+	}
 }
 
 // WriteBadRequest writes a 400 Bad Request error

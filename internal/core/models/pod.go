@@ -5,6 +5,40 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// SchedulingFailureCategory represents the category of scheduling failure
+type SchedulingFailureCategory string
+
+const (
+	// Resource-related failures
+	FailureCategoryResourceCPU     SchedulingFailureCategory = "InsufficientCPU"
+	FailureCategoryResourceMemory  SchedulingFailureCategory = "InsufficientMemory"
+	FailureCategoryResourceStorage SchedulingFailureCategory = "InsufficientStorage"
+
+	// Volume-related failures
+	FailureCategoryVolumeAttachment   SchedulingFailureCategory = "VolumeAttachmentError"
+	FailureCategoryVolumeMultiAttach  SchedulingFailureCategory = "VolumeMultiAttachError"
+	FailureCategoryVolumeNodeAffinity SchedulingFailureCategory = "VolumeNodeAffinityConflict"
+
+	// Scheduling constraint failures
+	FailureCategoryNodeAffinity SchedulingFailureCategory = "NodeAffinityNotMatch"
+	FailureCategoryTaints       SchedulingFailureCategory = "TaintTolerationMismatch"
+	FailureCategoryPodAffinity  SchedulingFailureCategory = "PodAffinityConflict"
+
+	// Node status failures
+	FailureCategoryNodeNotReady SchedulingFailureCategory = "NodeNotReady"
+
+	// Other failures
+	FailureCategoryMiscellaneous SchedulingFailureCategory = "Miscellaneous"
+)
+
+// FailureCategorySummary provides a summary of failure categories
+type FailureCategorySummary struct {
+	Category    SchedulingFailureCategory `json:"category"`
+	Count       int                       `json:"count"`
+	Description string                    `json:"description"`
+	Nodes       []string                  `json:"nodes,omitempty"`
+}
+
 // PodScheduling contains scheduling-specific information for a pod
 type PodScheduling struct {
 	NodeName          string            `json:"nodeName,omitempty"`
@@ -14,6 +48,62 @@ type PodScheduling struct {
 	NodeSelector      map[string]string `json:"nodeSelector,omitempty"`
 	Priority          *int32            `json:"priority,omitempty"`
 	PriorityClassName string            `json:"priorityClassName,omitempty"`
+
+	// Enhanced scheduling information
+	Status              string                      `json:"status"` // "Scheduled", "Pending", "Failed"
+	SchedulingDecisions *SchedulingDecisions        `json:"schedulingDecisions,omitempty"`
+	UnschedulableNodes  []UnschedulableNode         `json:"unschedulableNodes,omitempty"`
+	Events              []SchedulingEvent           `json:"events,omitempty"`
+	Conditions          []v1.PodCondition           `json:"conditions,omitempty"`
+	FailureCategories   []SchedulingFailureCategory `json:"failureCategories,omitempty"`
+	FailureSummary      []FailureCategorySummary    `json:"failureSummary,omitempty"`
+}
+
+// SchedulingDecisions explains why a pod was scheduled on a specific node
+type SchedulingDecisions struct {
+	SelectedNode        string             `json:"selectedNode"`
+	Reasons             []string           `json:"reasons"`
+	NodeScore           int32              `json:"nodeScore,omitempty"`
+	MatchedAffinity     []string           `json:"matchedAffinity,omitempty"`
+	ToleratedTaints     []string           `json:"toleratedTaints,omitempty"`
+	MatchedNodeSelector map[string]string  `json:"matchedNodeSelector,omitempty"`
+	ResourcesFit        ResourceFitDetails `json:"resourcesFit"`
+}
+
+// UnschedulableNode contains information about why a pod cannot be scheduled on a specific node
+type UnschedulableNode struct {
+	NodeName              string            `json:"nodeName"`
+	Reasons               []string          `json:"reasons"`
+	UntoleratedTaints     []TaintInfo       `json:"untoleratedTaints,omitempty"`
+	UnmatchedAffinity     []string          `json:"unmatchedAffinity,omitempty"`
+	UnmatchedSelectors    map[string]string `json:"unmatchedSelectors,omitempty"`
+	InsufficientResources []string          `json:"insufficientResources,omitempty"`
+	PodAffinityConflicts  []string          `json:"podAffinityConflicts,omitempty"`
+}
+
+// TaintInfo contains simplified taint information
+type TaintInfo struct {
+	Key    string `json:"key"`
+	Value  string `json:"value,omitempty"`
+	Effect string `json:"effect"`
+}
+
+// ResourceFitDetails contains information about resource availability
+type ResourceFitDetails struct {
+	NodeCapacity    v1.ResourceList `json:"nodeCapacity"`
+	NodeAllocatable v1.ResourceList `json:"nodeAllocatable"`
+	NodeRequested   v1.ResourceList `json:"nodeRequested"`
+	PodRequests     v1.ResourceList `json:"podRequests"`
+	Fits            bool            `json:"fits"`
+}
+
+// SchedulingEvent contains scheduling-related event information
+type SchedulingEvent struct {
+	Type      string      `json:"type"`
+	Reason    string      `json:"reason"`
+	Message   string      `json:"message"`
+	Timestamp metav1.Time `json:"timestamp"`
+	Count     int32       `json:"count"`
 }
 
 // PodResources contains aggregated resource information for a pod
