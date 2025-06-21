@@ -4,11 +4,13 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/sumandas0/k8s-cluster-agent/internal/core"
@@ -172,6 +174,200 @@ func (s *podService) GetPodResources(ctx context.Context, namespace, name string
 	)
 
 	return result, nil
+}
+
+// GetPodDescription returns comprehensive pod information similar to kubectl describe pod
+func (s *podService) GetPodDescription(ctx context.Context, namespace, name string) (*models.PodDescription, error) {
+	s.logger.Debug("getting pod description", "namespace", namespace, "pod", name)
+
+	pod, err := s.GetPod(ctx, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get events related to this pod
+	events, err := s.getPodEvents(ctx, namespace, name)
+	if err != nil {
+		s.logger.Warn("failed to get pod events",
+			"namespace", namespace,
+			"pod", name,
+			"error", err.Error())
+		// Continue without events rather than failing
+		events = []models.EventInfo{}
+	}
+
+	// Build comprehensive description
+	description := &models.PodDescription{
+		Name:        pod.Name,
+		Namespace:   pod.Namespace,
+		Labels:      pod.Labels,
+		Annotations: pod.Annotations,
+		Status: models.PodStatusInfo{
+			Phase:             string(pod.Status.Phase),
+			Reason:            pod.Status.Reason,
+			Message:           pod.Status.Message,
+			HostIP:            pod.Status.HostIP,
+			PodIP:             pod.Status.PodIP,
+			NominatedNodeName: pod.Status.NominatedNodeName,
+		},
+		Node:              pod.Spec.NodeName,
+		StartTime:         pod.Status.StartTime,
+		PodIP:             pod.Status.PodIP,
+		QOSClass:          string(pod.Status.QOSClass),
+		Priority:          pod.Spec.Priority,
+		PriorityClassName: pod.Spec.PriorityClassName,
+		Tolerations:       pod.Spec.Tolerations,
+		NodeSelector:      pod.Spec.NodeSelector,
+		Events:            events,
+		Conditions:        pod.Status.Conditions,
+	}
+
+	// Add PodIPs
+	for _, podIP := range pod.Status.PodIPs {
+		description.PodIPs = append(description.PodIPs, podIP.IP)
+	}
+
+	// Process containers
+	description.Containers = s.buildContainerInfo(pod.Spec.Containers, pod.Status.ContainerStatuses)
+
+	// Process init containers
+	if len(pod.Spec.InitContainers) > 0 {
+		description.InitContainers = s.buildContainerInfo(pod.Spec.InitContainers, pod.Status.InitContainerStatuses)
+	}
+
+	// Process volumes
+	description.Volumes = s.buildVolumeInfo(pod.Spec.Volumes)
+
+	s.logger.Debug("successfully built pod description",
+		"namespace", namespace,
+		"pod", name,
+		"containers", len(description.Containers),
+		"volumes", len(description.Volumes),
+		"events", len(description.Events))
+
+	return description, nil
+}
+
+// getPodEvents fetches recent events related to the pod
+func (s *podService) getPodEvents(ctx context.Context, namespace, podName string) ([]models.EventInfo, error) {
+	// Create field selector to get events for this specific pod
+	fieldSelector := fields.AndSelectors(
+		fields.OneTermEqualSelector("involvedObject.kind", "Pod"),
+		fields.OneTermEqualSelector("involvedObject.name", podName),
+		fields.OneTermEqualSelector("involvedObject.namespace", namespace),
+	).String()
+
+	eventList, err := s.k8sClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: fieldSelector,
+		Limit:         20, // Limit to most recent 20 events
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get events for pod %s/%s: %w", namespace, podName, err)
+	}
+
+	// Sort events by timestamp (most recent first)
+	sort.Slice(eventList.Items, func(i, j int) bool {
+		return eventList.Items[i].LastTimestamp.After(eventList.Items[j].LastTimestamp.Time)
+	})
+
+	events := make([]models.EventInfo, 0, len(eventList.Items))
+	for _, event := range eventList.Items {
+		events = append(events, models.EventInfo{
+			Type:           event.Type,
+			Reason:         event.Reason,
+			Message:        event.Message,
+			FirstTimestamp: event.FirstTimestamp,
+			LastTimestamp:  event.LastTimestamp,
+			Count:          event.Count,
+			Source:         fmt.Sprintf("%s/%s", event.Source.Component, event.Source.Host),
+		})
+	}
+
+	return events, nil
+}
+
+// buildContainerInfo creates ContainerInfo from container specs and statuses
+func (s *podService) buildContainerInfo(containers []v1.Container, statuses []v1.ContainerStatus) []models.ContainerInfo {
+	containerInfo := make([]models.ContainerInfo, 0, len(containers))
+
+	// Create a map of container statuses for quick lookup
+	statusMap := make(map[string]v1.ContainerStatus)
+	for _, status := range statuses {
+		statusMap[status.Name] = status
+	}
+
+	for _, container := range containers {
+		info := models.ContainerInfo{
+			Name:        container.Name,
+			Image:       container.Image,
+			Resources:   container.Resources,
+			Environment: container.Env,
+		}
+
+		// Add volume mounts
+		for _, mount := range container.VolumeMounts {
+			info.Mounts = append(info.Mounts, models.VolumeMountInfo{
+				Name:      mount.Name,
+				MountPath: mount.MountPath,
+				ReadOnly:  mount.ReadOnly,
+				SubPath:   mount.SubPath,
+			})
+		}
+
+		// Add status information if available
+		if status, exists := statusMap[container.Name]; exists {
+			info.ImageID = status.ImageID
+			info.State = status.State
+			info.Ready = status.Ready
+			info.RestartCount = status.RestartCount
+		}
+
+		containerInfo = append(containerInfo, info)
+	}
+
+	return containerInfo
+}
+
+// buildVolumeInfo creates VolumeInfo from volume specs
+func (s *podService) buildVolumeInfo(volumes []v1.Volume) []models.VolumeInfo {
+	volumeInfo := make([]models.VolumeInfo, 0, len(volumes))
+
+	for _, volume := range volumes {
+		info := models.VolumeInfo{
+			Name:   volume.Name,
+			Type:   s.getVolumeType(volume.VolumeSource),
+			Source: volume.VolumeSource,
+		}
+		volumeInfo = append(volumeInfo, info)
+	}
+
+	return volumeInfo
+}
+
+// getVolumeType determines the volume type from VolumeSource
+func (s *podService) getVolumeType(source v1.VolumeSource) string {
+	switch {
+	case source.EmptyDir != nil:
+		return "EmptyDir"
+	case source.HostPath != nil:
+		return "HostPath"
+	case source.Secret != nil:
+		return "Secret"
+	case source.ConfigMap != nil:
+		return "ConfigMap"
+	case source.PersistentVolumeClaim != nil:
+		return "PersistentVolumeClaim"
+	case source.DownwardAPI != nil:
+		return "DownwardAPI"
+	case source.Projected != nil:
+		return "Projected"
+	case source.CSI != nil:
+		return "CSI"
+	case source.Ephemeral != nil:
+		return "Ephemeral"
+	default:
+		return "Unknown"
+	}
 }
 
 // safeAddQuantity safely adds two resource quantities with error handling

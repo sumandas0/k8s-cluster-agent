@@ -16,6 +16,10 @@ type PodService interface {
 	// Returns ErrNotFound if the pod doesn't exist.
 	GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error)
 
+	// GetPodDescription returns comprehensive pod information similar to kubectl describe pod.
+	// Returns ErrNotFound if the pod doesn't exist.
+	GetPodDescription(ctx context.Context, namespace, name string) (*models.PodDescription, error)
+
 	// GetPodScheduling returns scheduling-specific information for a pod.
 	// Returns ErrNotFound if the pod doesn't exist.
 	GetPodScheduling(ctx context.Context, namespace, name string) (*models.PodScheduling, error)

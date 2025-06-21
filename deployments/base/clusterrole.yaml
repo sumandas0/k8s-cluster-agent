@@ -15,6 +15,11 @@ rules:
     resources: ["nodes"]
     verbs: ["get"]
   
+  # Event permissions - read-only access to events for pod descriptions
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list"]
+  
   # Metrics permissions - read-only access to node metrics
   - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes"]

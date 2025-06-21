@@ -46,10 +46,10 @@ func (h *PodHandlers) GetPodDescribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get pod details
-	pod, err := h.podService.GetPod(r.Context(), namespace, podName)
+	// Get pod description
+	description, err := h.podService.GetPodDescription(r.Context(), namespace, podName)
 	if err != nil {
-		h.handleServiceError(w, r, err, "failed to get pod describe", namespace, podName)
+		h.handleServiceError(w, r, err, "failed to get pod description", namespace, podName)
 		return
 	}
 
@@ -60,7 +60,7 @@ func (h *PodHandlers) GetPodDescribe(w http.ResponseWriter, r *http.Request) {
 	)
 
 	// Write response
-	responses.WriteJSON(w, responses.Success(pod))
+	responses.WriteJSON(w, responses.Success(description))
 }
 
 // GetPodScheduling handles GET /api/v1/pods/{namespace}/{podName}/scheduling

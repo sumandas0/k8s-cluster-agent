@@ -72,7 +72,7 @@ http://<service-name>.<namespace>.svc.cluster.local/api/v1
 GET /api/v1/pods/{namespace}/{podName}/describe
 ```
 
-Returns the complete pod specification and status.
+Returns comprehensive pod information similar to `kubectl describe pod`, including containers, volumes, events, and status details.
 
 **Example:**
 ```bash
@@ -83,12 +83,90 @@ curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/de
 ```json
 {
   "data": {
-    "metadata": {
-      "name": "my-pod",
-      "namespace": "default"
+    "name": "my-pod",
+    "namespace": "default",
+    "labels": {
+      "app": "my-app",
+      "version": "1.0"
     },
-    "spec": { ... },
-    "status": { ... }
+    "annotations": {
+      "deployment.kubernetes.io/revision": "1"
+    },
+    "status": {
+      "phase": "Running",
+      "podIP": "10.244.1.5",
+      "hostIP": "192.168.1.100"
+    },
+    "node": "node-1",
+    "containers": [
+      {
+        "name": "app",
+        "image": "nginx:1.20",
+        "ready": true,
+        "restartCount": 0,
+        "state": {
+          "running": {
+            "startedAt": "2023-06-21T10:25:00Z"
+          }
+        },
+        "resources": {
+          "requests": {
+            "cpu": "100m",
+            "memory": "128Mi"
+          },
+          "limits": {
+            "cpu": "200m",
+            "memory": "256Mi"
+          }
+        },
+        "environment": [
+          {
+            "name": "ENV_VAR",
+            "value": "value"
+          }
+        ],
+        "mounts": [
+          {
+            "name": "config-volume",
+            "mountPath": "/etc/config",
+            "readOnly": true
+          }
+        ]
+      }
+    ],
+    "volumes": [
+      {
+        "name": "config-volume",
+        "type": "ConfigMap",
+        "source": {
+          "configMap": {
+            "name": "my-config"
+          }
+        }
+      }
+    ],
+    "qosClass": "Burstable",
+    "priority": 0,
+    "tolerations": [],
+    "nodeSelector": {},
+    "conditions": [
+      {
+        "type": "Ready",
+        "status": "True",
+        "lastTransitionTime": "2023-06-21T10:25:30Z"
+      }
+    ],
+    "events": [
+      {
+        "type": "Normal",
+        "reason": "Scheduled",
+        "message": "Successfully assigned pod to node",
+        "firstTimestamp": "2023-06-21T10:25:00Z",
+        "lastTimestamp": "2023-06-21T10:25:00Z",
+        "count": 1,
+        "source": "default-scheduler/master-node"
+      }
+    ]
   },
   "metadata": {
     "requestId": "123e4567-e89b-12d3-a456-426614174000",
