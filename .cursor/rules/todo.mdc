@@ -1,0 +1,133 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# Implementation To-Do Lists for In-Cluster Kubernetes Agent
+
+## Phase 1: Project Setup and Foundation
+- [ ] Initialize Go module with name `github.com/sumandas0/k8s-cluster-agent`
+- [ ] Set up project directory structure following Go best practices
+- [ ] Create Dockerfile for multi-stage build (builder + runtime)
+- [ ] Set up Makefile with common tasks (build, test, docker-build, docker-push)
+- [ ] Initialize git repository with proper .gitignore for Go projects
+- [ ] Set up Go module dependencies management
+
+## Phase 2: Core Service Layer Implementation
+- [ ] Create interfaces for Kubernetes client interactions
+  - [ ] Define `PodService` interface with methods for pod operations
+  - [ ] Define `NodeService` interface with methods for node operations
+- [ ] Implement Kubernetes client initialization
+  - [ ] Create in-cluster config loader
+  - [ ] Initialize standard Kubernetes clientset
+  - [ ] Initialize metrics clientset for node utilization
+- [ ] Implement PodService
+  - [ ] Method to get full pod details (describe)
+  - [ ] Method to extract scheduling information
+  - [ ] Method to extract resource requirements
+  - [ ] Add proper error handling and logging
+- [ ] Implement NodeService
+  - [ ] Method to get node utilization from metrics API
+  - [ ] Add fallback handling if metrics server unavailable
+  - [ ] Add proper error handling and logging
+- [ ] Create service factory for dependency injection
+
+## Phase 3: HTTP Transport Layer Implementation
+- [ ] Set up Chi router with middleware
+  - [ ] Add request ID middleware
+  - [ ] Add structured logging middleware
+  - [ ] Add recovery middleware for panic handling
+  - [ ] Add timeout middleware (500ms deadline)
+- [ ] Implement HTTP handlers
+  - [ ] GET /api/v1/pods/{namespace}/{podName}/describe
+  - [ ] GET /api/v1/pods/{namespace}/{podName}/scheduling
+  - [ ] GET /api/v1/pods/{namespace}/{podName}/resources
+  - [ ] GET /api/v1/nodes/{nodeName}/utilization
+  - [ ] Add health check endpoint /healthz
+  - [ ] Add readiness endpoint /readyz
+- [ ] Implement proper error responses
+  - [ ] 404 for resources not found
+  - [ ] 500 for internal errors
+  - [ ] 503 when Kubernetes API unavailable
+- [ ] Add OpenAPI/Swagger documentation annotations
+
+## Phase 4: Configuration and Observability
+- [ ] Implement configuration management
+  - [ ] Use environment variables for configuration
+  - [ ] Port configuration (default 8080)
+  - [ ] Log level configuration
+  - [ ] Kubernetes API timeout configuration
+- [ ] Set up structured logging
+  - [ ] Use JSON format for logs
+  - [ ] Include request ID in all log entries
+  - [ ] Log all API requests with duration
+  - [ ] Log Kubernetes API interactions
+- [ ] Add Prometheus metrics (optional but recommended)
+  - [ ] HTTP request duration histogram
+  - [ ] HTTP request counter by endpoint and status
+  - [ ] Kubernetes API call metrics
+
+## Phase 5: Testing
+- [ ] Write unit tests for Core Service Layer
+  - [ ] Mock Kubernetes client for testing
+  - [ ] Test all service methods with various scenarios
+  - [ ] Test error handling paths
+- [ ] Write integration tests for HTTP handlers
+  - [ ] Test successful responses
+  - [ ] Test error scenarios
+  - [ ] Test request validation
+- [ ] Add benchmarks for critical paths
+- [ ] Set up test coverage reporting
+
+## Phase 6: Kubernetes Deployment
+- [ ] Create RBAC resources
+  - [ ] Define ServiceAccount
+  - [ ] Define ClusterRole with minimal permissions
+    - [ ] get, list pods in all namespaces
+    - [ ] get nodes
+    - [ ] get nodes/metrics
+  - [ ] Create ClusterRoleBinding
+- [ ] Create Deployment manifest
+  - [ ] Use ServiceAccount created above
+  - [ ] Set resource requests/limits
+  - [ ] Configure liveness/readiness probes
+  - [ ] Add security context (non-root user)
+- [ ] Create Service manifest
+  - [ ] ClusterIP service on port 80 -> 8080
+- [ ] Create NetworkPolicy (optional but recommended)
+- [ ] Add Horizontal Pod Autoscaler (optional)
+
+## Phase 7: Documentation and CI/CD
+- [ ] Write comprehensive README.md
+  - [ ] Installation instructions
+  - [ ] API documentation with examples
+  - [ ] Architecture overview
+  - [ ] Development setup guide
+- [ ] Create API documentation
+  - [ ] OpenAPI spec generation
+  - [ ] Example curl commands
+  - [ ] Error code documentation
+- [ ] Set up CI/CD pipeline
+  - [ ] GitHub Actions or similar
+  - [ ] Run tests on PR
+  - [ ] Build and push Docker image on merge
+  - [ ] Security scanning for dependencies
+  - [ ] Container image scanning
+
+## Phase 8: Production Readiness
+- [ ] Add rate limiting to prevent abuse
+- [ ] Implement graceful shutdown
+- [ ] Add distributed tracing support (optional)
+- [ ] Performance testing under load
+- [ ] Security audit of RBAC permissions
+- [ ] Create Helm chart for easier deployment
+- [ ] Add support for custom annotations/labels
+- [ ] Document monitoring and alerting setup
+
+## Future Enhancements (Post v1.1)
+- [ ] Design gRPC transport layer interface
+- [ ] Add caching layer for frequently accessed data
+- [ ] Implement webhook for real-time updates
+- [ ] Add support for more resource types
+- [ ] Create CLI client for the API
+- [ ] Add multi-cluster support architecture

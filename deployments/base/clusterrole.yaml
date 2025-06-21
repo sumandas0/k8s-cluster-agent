@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-cluster-agent
+  labels:
+    app: k8s-cluster-agent
+rules:
+  # Pod permissions - read-only access to pods in all namespaces
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  
+  # Node permissions - read-only access to nodes
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+  
+  # Metrics permissions - read-only access to node metrics
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes"]
+    verbs: ["get"] 

@@ -1,0 +1,269 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+# Project Implementation Rules for In-Cluster Kubernetes Agent
+
+## 1. Go Language Standards
+
+### 1.1 Code Style
+- Follow standard Go conventions and `gofmt`
+- Use `golangci-lint` with strict configuration
+- Package names should be lowercase, short, and descriptive
+- Avoid package names like `util`, `common`, `misc`
+
+### 1.2 Error Handling
+```go
+// ALWAYS check errors immediately
+result, err := someFunction()
+if err != nil {
+    return fmt.Errorf("failed to do something: %w", err)
+}
+
+// Use error wrapping for context
+if err := k8sClient.Get(ctx, pod); err != nil {
+    return fmt.Errorf("failed to get pod %s/%s: %w", namespace, name, err)
+}
+```
+
+### 1.3 Context Usage
+- Always pass `context.Context` as the first parameter
+- Use context for cancellation and timeout control
+- Add request ID to context for tracing
+
+## 2. Architecture Rules
+
+### 2.1 Dependency Direction
+- Transport layer → Core layer → Kubernetes client
+- Core layer MUST NOT import transport packages
+- Use interfaces for dependency injection
+
+### 2.2 Interface Design
+```go
+// Define small, focused interfaces
+type PodService interface {
+    GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error)
+    GetPodScheduling(ctx context.Context, namespace, name string) (*models.PodScheduling, error)
+    GetPodResources(ctx context.Context, namespace, name string) (*models.PodResources, error)
+}
+
+// Accept interfaces, return concrete types
+func NewHTTPHandler(podSvc PodService) *Handler {
+    return &Handler{podService: podSvc}
+}
+```
+
+### 2.3 No Business Logic in Handlers
+```go
+// BAD - Business logic in handler
+func (h *Handler) GetPod(w http.ResponseWriter, r *http.Request) {
+    // DON'T: Direct K8s client calls here
+    pod, err := h.k8sClient.CoreV1().Pods(namespace).Get(...)
+}
+
+// GOOD - Delegate to service
+func (h *Handler) GetPod(w http.ResponseWriter, r *http.Request) {
+    pod, err := h.podService.GetPod(r.Context(), namespace, name)
+    if err != nil {
+        responses.WriteError(w, err)
+        return
+    }
+    responses.WriteJSON(w, pod)
+}
+```
+
+## 3. Kubernetes Client Rules
+
+### 3.1 Client Initialization
+- Use in-cluster config only
+- Set reasonable timeouts (30s default)
+- Handle metrics client availability gracefully
+
+### 3.2 Resource Access
+- Use typed clients over dynamic clients
+- Always use context for API calls
+- Implement exponential backoff for retries
+
+### 3.3 RBAC Principles
+- Request minimum necessary permissions
+- Document why each permission is needed
+- Never request cluster-admin or write permissions
+
+## 4. HTTP API Rules
+
+### 4.1 RESTful Design
+- Use proper HTTP methods (GET only for v1.1)
+- Return appropriate status codes
+- Use consistent URL patterns
+
+### 4.2 Response Format
+```json
+// Success response
+{
+    "data": { ... },
+    "metadata": {
+        "requestId": "uuid",
+        "timestamp": "2025-06-21T10:30:00Z"
+    }
+}
+
+// Error response
+{
+    "error": {
+        "code": "RESOURCE_NOT_FOUND",
+        "message": "Pod not found",
+        "details": "Pod 'my-pod' not found in namespace 'default'"
+    },
+    "metadata": {
+        "requestId": "uuid",
+        "timestamp": "2025-06-21T10:30:00Z"
+    }
+}
+```
+
+### 4.3 Timeout Handling
+- Set 500ms timeout for all requests
+- Return 504 Gateway Timeout on deadline exceeded
+- Log slow requests (>300ms)
+
+## 5. Security Rules
+
+### 5.1 Container Security
+```dockerfile
+# Run as non-root user
+USER 65534
+
+# Read-only root filesystem
+# Set in K8s SecurityContext
+```
+
+### 5.2 Network Security
+- Never expose cluster API directly
+- Validate all input parameters
+- Sanitize error messages (no internal details)
+
+### 5.3 Secret Management
+- No hardcoded credentials
+- Use ServiceAccount tokens only
+- Never log sensitive information
+
+## 6. Testing Rules
+
+### 6.1 Test Coverage
+- Minimum 80% code coverage
+- 100% coverage for core business logic
+- Test both success and error paths
+
+### 6.2 Test Structure
+```go
+func TestPodService_GetPod(t *testing.T) {
+    tests := []struct {
+        name      string
+        namespace string
+        podName   string
+        mockSetup func(*mocks.MockK8sClient)
+        want      *v1.Pod
+        wantErr   bool
+    }{
+        // Test cases here
+    }
+    
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            // Test implementation
+        })
+    }
+}
+```
+
+### 6.3 Mock Usage
+- Use interfaces for mocking
+- Generate mocks with mockgen
+- Never mock what you don't own
+
+## 7. Logging Rules
+
+### 7.1 Structured Logging
+```go
+logger.Info("processing request",
+    "method", r.Method,
+    "path", r.URL.Path,
+    "namespace", namespace,
+    "pod", podName,
+    "requestId", requestID,
+)
+```
+
+### 7.2 Log Levels
+- ERROR: Unexpected errors that need attention
+- WARN: Expected errors (404, validation failures)
+- INFO: Request/response logs, important events
+- DEBUG: Detailed debugging information
+
+### 7.3 What to Log
+- All HTTP requests with duration
+- Kubernetes API errors
+- Service initialization
+- Configuration values (non-sensitive)
+
+## 8. Performance Rules
+
+### 8.1 Resource Limits
+- Set memory limit: 128Mi
+- Set CPU limit: 100m
+- Monitor actual usage and adjust
+
+### 8.2 Optimization Guidelines
+- Cache Kubernetes client config
+- Reuse HTTP client connections
+- Avoid unnecessary object copies
+- Use streaming for large responses
+
+### 8.3 Monitoring
+- Expose Prometheus metrics
+- Track request latencies
+- Monitor error rates
+- Alert on SLO violations
+
+## 9. Development Workflow
+
+### 9.1 Branch Strategy
+- main: Production-ready code
+- develop: Integration branch
+- feature/*: Feature branches
+- fix/*: Bug fix branches
+
+### 9.2 Commit Messages
+```
+feat: add pod scheduling endpoint
+fix: handle missing metrics server gracefully
+docs: update API examples
+chore: upgrade client-go to v0.27.0
+```
+
+### 9.3 Code Review Rules
+- All code must be reviewed
+- Run tests before review
+- Check for security issues
+- Verify documentation updates
+
+## 10. Documentation Rules
+
+### 10.1 Code Documentation
+```go
+// PodService provides operations for querying pod information
+// from the Kubernetes API. It handles both standard pod data
+// and metrics when available.
+type PodService interface {
+    // GetPod returns the full pod specification and status.
+    // Returns ErrNotFound if the pod doesn't exist.
+    GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error)
+}
+```
+
+### 10.2 API Documentation
+- Document all endpoints in OpenAPI spec
+- Provide curl examples for each endpoint
+- Include error response examples
+- Document rate limits and quotas

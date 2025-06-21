@@ -1,0 +1,162 @@
+---
+description: Project structure
+globs: 
+alwaysApply: false
+---
+# Project Structure for In-Cluster Kubernetes Agent
+
+```
+k8s-cluster-agent/
+├── cmd/
+│   └── agent/
+│       └── main.go                 # Application entry point
+│
+├── internal/                       # Private application code
+│   ├── config/
+│   │   └── config.go              # Configuration management
+│   │
+│   ├── core/                      # Core business logic (protocol-agnostic)
+│   │   ├── interfaces.go          # Service interfaces definitions
+│   │   ├── services/
+│   │   │   ├── pod_service.go     # Pod-related operations
+│   │   │   ├── pod_service_test.go
+│   │   │   ├── node_service.go    # Node-related operations
+│   │   │   └── node_service_test.go
+│   │   ├── models/
+│   │   │   ├── pod.go            # Pod response models
+│   │   │   └── node.go           # Node response models
+│   │   └── factory/
+│   │       └── factory.go         # Service factory for DI
+│   │
+│   ├── transport/                 # Transport layer (HTTP, future gRPC)
+│   │   └── http/
+│   │       ├── server.go          # HTTP server setup
+│   │       ├── router.go          # Chi router configuration
+│   │       ├── middleware/
+│   │       │   ├── logging.go     # Request logging middleware
+│   │       │   ├── recovery.go    # Panic recovery middleware
+│   │       │   └── timeout.go     # Request timeout middleware
+│   │       ├── handlers/
+│   │       │   ├── pod_handlers.go      # Pod-related HTTP handlers
+│   │       │   ├── pod_handlers_test.go
+│   │       │   ├── node_handlers.go     # Node-related HTTP handlers
+│   │       │   ├── node_handlers_test.go
+│   │       │   └── health_handlers.go   # Health check handlers
+│   │       └── responses/
+│   │           ├── errors.go      # Error response helpers
+│   │           └── success.go     # Success response helpers
+│   │
+│   ├── kubernetes/                # Kubernetes client utilities
+│   │   ├── client.go             # Client initialization
+│   │   └── client_test.go
+│   │
+│   └── logging/                  # Logging utilities
+│       ├── logger.go             # Structured logger setup
+│       └── context.go            # Context-aware logging
+│
+├── deployments/                  # Kubernetes manifests
+│   ├── base/
+│   │   ├── kustomization.yaml
+│   │   ├── namespace.yaml
+│   │   ├── serviceaccount.yaml
+│   │   ├── clusterrole.yaml
+│   │   ├── clusterrolebinding.yaml
+│   │   ├── deployment.yaml
+│   │   └── service.yaml
+│   └── overlays/
+│       ├── development/
+│       │   └── kustomization.yaml
+│       └── production/
+│           ├── kustomization.yaml
+│           ├── hpa.yaml          # Horizontal Pod Autoscaler
+│           └── networkpolicy.yaml
+│
+├── api/                          # API definitions
+│   └── openapi/
+│       └── spec.yaml             # OpenAPI specification
+│
+├── scripts/                      # Utility scripts
+│   ├── generate-openapi.sh       # Generate OpenAPI docs
+│   └── validate-manifests.sh     # Validate K8s manifests
+│
+├── build/                        # Build-related files
+│   └── docker/
+│       └── Dockerfile            # Multi-stage Dockerfile
+│
+├── docs/                         # Documentation
+│   ├── api/
+│   │   └── examples.md          # API usage examples
+│   ├── architecture/
+│   │   ├── overview.md          # Architecture overview
+│   │   └── decisions/           # Architecture Decision Records
+│   └── operations/
+│       ├── deployment.md        # Deployment guide
+│       └── monitoring.md        # Monitoring setup
+│
+├── test/                        # Additional test files
+│   ├── integration/             # Integration tests
+│   └── e2e/                     # End-to-end tests
+│
+├── .github/                     # GitHub specific files
+│   └── workflows/
+│       ├── ci.yaml              # CI pipeline
+│       └── release.yaml         # Release pipeline
+│
+├── go.mod                       # Go module definition
+├── go.sum                       # Go module checksums
+├── Makefile                     # Build automation
+├── README.md                    # Project documentation
+├── LICENSE                      # License file
+├── .gitignore                   # Git ignore rules
+├── .golangci.yml               # Linter configuration
+└── .dockerignore               # Docker ignore rules
+```
+
+## Directory Descriptions
+
+### `/cmd/agent/`
+- Contains the `main.go` file which is the entry point
+- Minimal code - just initialization and server startup
+- All business logic should be in `/internal/`
+
+### `/internal/core/`
+- Protocol-agnostic business logic
+- No HTTP or gRPC specific code
+- Easy to test in isolation
+- Can be reused by different transport layers
+
+### `/internal/transport/`
+- Protocol-specific implementations
+- Currently only HTTP, but designed for easy addition of gRPC
+- Each protocol in its own subdirectory
+- Handlers call core services, handle protocol-specific concerns
+
+### `/internal/kubernetes/`
+- Kubernetes client initialization and utilities
+- Abstracts away client-go complexity
+- Provides mockable interfaces for testing
+
+### `/deployments/`
+- Uses Kustomize for environment-specific configurations
+- Base contains common resources
+- Overlays for dev/prod differences
+
+### `/api/`
+- API specifications and contracts
+- OpenAPI/Swagger definitions
+- Versioned API documentation
+
+### `/docs/`
+- Comprehensive documentation
+- Architecture Decision Records (ADRs)
+- Operational guides
+
+## Key Design Principles
+
+1. **Separation of Concerns**: Core business logic is separate from transport
+2. **Dependency Injection**: Use interfaces and factory pattern
+3. **Testability**: Every component should be easily testable
+4. **Extensibility**: Easy to add new protocols or features
+5. **Configuration**: Environment-based configuration
+6. **Security**: Minimal permissions, secure defaults
+7. **Observability**: Structured logging, metrics, health checks

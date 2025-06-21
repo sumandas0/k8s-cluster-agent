@@ -1,0 +1,37 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+README.md
+docs/
+
+# Development files
+.github/
+.golangci.yml
+Makefile
+
+# Test files
+*_test.go
+test/
+coverage.out
+
+# Build artifacts
+bin/
+dist/
+k8s-cluster-agent
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Kubernetes manifests (not needed in image)
+deployments/
+
+# Scripts
+scripts/ 

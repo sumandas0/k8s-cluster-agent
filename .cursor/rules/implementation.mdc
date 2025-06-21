@@ -1,0 +1,545 @@
+---
+description: Project implementation details
+globs: 
+alwaysApply: false
+---
+# Project Implementation Details for In-Cluster Kubernetes Agent
+
+## 1. Core Service Implementation Details
+
+### 1.1 PodService Implementation
+
+```go
+// Package: internal/core/services/pod_service.go
+
+type podService struct {
+    k8sClient kubernetes.Interface
+    logger    *slog.Logger
+}
+
+// Key implementation points:
+// 1. GetPod: Return the raw v1.Pod object from K8s API
+// 2. GetPodScheduling: Extract scheduling-specific fields
+//    - nodeName
+//    - schedulerName  
+//    - affinity (node/pod affinity and anti-affinity)
+//    - tolerations
+//    - nodeSelector
+//    - priority and priorityClassName
+// 3. GetPodResources: Aggregate resources from all containers
+//    - Sum up requests/limits across containers
+//    - Include init containers
+//    - Handle missing values (0 = no limit)
+```
+
+### 1.2 NodeService Implementation
+
+```go
+// Package: internal/core/services/node_service.go
+
+type nodeService struct {
+    k8sClient     kubernetes.Interface
+    metricsClient metricsclientset.Interface
+    logger        *slog.Logger
+}
+
+// Key implementation points:
+// 1. Check if metrics server is available
+// 2. Fallback gracefully if metrics unavailable
+// 3. Calculate utilization percentage
+// 4. Return both raw values and percentages
+```
+
+### 1.3 Error Handling Strategy
+
+```go
+// Define domain-specific errors
+var (
+    ErrPodNotFound     = errors.New("pod not found")
+    ErrNodeNotFound    = errors.New("node not found")
+    ErrMetricsNotAvailable = errors.New("metrics server not available")
+)
+
+// Use error wrapping for context
+if apierrors.IsNotFound(err) {
+    return nil, ErrPodNotFound
+}
+```
+
+## 2. HTTP Transport Implementation Details
+
+### 2.1 Router Configuration
+
+```go
+// Package: internal/transport/http/router.go
+
+func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
+    r := chi.NewRouter()
+    
+    // Global middleware
+    r.Use(middleware.RequestID)
+    r.Use(middleware.RealIP)
+    r.Use(middleware.Recoverer)
+    r.Use(LoggingMiddleware(logger))
+    r.Use(TimeoutMiddleware(500 * time.Millisecond))
+    
+    // API routes
+    r.Route("/api/v1", func(r chi.Router) {
+        r.Route("/pods/{namespace}/{podName}", func(r chi.Router) {
+            r.Get("/describe", handlePodDescribe)
+            r.Get("/scheduling", handlePodScheduling)
+            r.Get("/resources", handlePodResources)
+        })
+        r.Get("/nodes/{nodeName}/utilization", handleNodeUtilization)
+    })
+    
+    // Health checks
+    r.Get("/healthz", handleHealth)
+    r.Get("/readyz", handleReadiness)
+    
+    return r
+}
+```
+
+### 2.2 Handler Pattern
+
+```go
+// Consistent handler pattern for all endpoints
+func handlePodDescribe(svc core.PodService) http.HandlerFunc {
+    return func(w http.ResponseWriter, r *http.Request) {
+        namespace := chi.URLParam(r, "namespace")
+        podName := chi.URLParam(r, "podName")
+        
+        // Input validation
+        if err := validatePodParams(namespace, podName); err != nil {
+            responses.WriteBadRequest(w, err)
+            return
+        }
+        
+        // Call service
+        pod, err := svc.GetPod(r.Context(), namespace, podName)
+        if err != nil {
+            handleServiceError(w, err)
+            return
+        }
+        
+        // Write response
+        responses.WriteJSON(w, responses.Success(pod))
+    }
+}
+```
+
+### 2.3 Error Response Mapping
+
+```go
+func handleServiceError(w http.ResponseWriter, err error) {
+    switch {
+    case errors.Is(err, core.ErrPodNotFound):
+        responses.WriteNotFound(w, "Pod not found")
+    case errors.Is(err, core.ErrNodeNotFound):
+        responses.WriteNotFound(w, "Node not found")
+    case errors.Is(err, context.DeadlineExceeded):
+        responses.WriteTimeout(w, "Request timeout")
+    default:
+        responses.WriteInternalError(w, "Internal server error")
+    }
+}
+```
+
+## 3. Kubernetes Client Configuration
+
+### 3.1 Client Initialization
+
+```go
+// Package: internal/kubernetes/client.go
+
+type Clients struct {
+    Kubernetes kubernetes.Interface
+    Metrics    metricsclientset.Interface
+}
+
+func NewClients() (*Clients, error) {
+    // Load in-cluster config
+    config, err := rest.InClusterConfig()
+    if err != nil {
+        return nil, fmt.Errorf("failed to load in-cluster config: %w", err)
+    }
+    
+    // Set timeouts
+    config.Timeout = 30 * time.Second
+    
+    // Create clientsets
+    k8sClient, err := kubernetes.NewForConfig(config)
+    if err != nil {
+        return nil, fmt.Errorf("failed to create k8s client: %w", err)
+    }
+    
+    metricsClient, err := metricsclientset.NewForConfig(config)
+    if err != nil {
+        // Log warning but don't fail - metrics are optional
+        slog.Warn("failed to create metrics client", "error", err)
+    }
+    
+    return &Clients{
+        Kubernetes: k8sClient,
+        Metrics:    metricsClient,
+    }, nil
+}
+```
+
+### 3.2 Metrics Server Detection
+
+```go
+func (n *nodeService) checkMetricsAvailable(ctx context.Context) bool {
+    if n.metricsClient == nil {
+        return false
+    }
+    
+    // Try to list metrics to check availability
+    _, err := n.metricsClient.MetricsV1beta1().
+        NodeMetricses().
+        List(ctx, metav1.ListOptions{Limit: 1})
+    
+    return err == nil
+}
+```
+
+## 4. Response Models
+
+### 4.1 Pod Scheduling Response
+
+```go
+// Package: internal/core/models/pod.go
+
+type PodScheduling struct {
+    NodeName         string                `json:"nodeName,omitempty"`
+    SchedulerName    string                `json:"schedulerName"`
+    Affinity         *v1.Affinity          `json:"affinity,omitempty"`
+    Tolerations      []v1.Toleration       `json:"tolerations,omitempty"`
+    NodeSelector     map[string]string     `json:"nodeSelector,omitempty"`
+    Priority         *int32                `json:"priority,omitempty"`
+    PriorityClassName string               `json:"priorityClassName,omitempty"`
+}
+```
+
+### 4.2 Pod Resources Response
+
+```go
+type PodResources struct {
+    Containers []ContainerResources `json:"containers"`
+    Total      ResourceSummary      `json:"total"`
+}
+
+type ContainerResources struct {
+    Name     string              `json:"name"`
+    Requests v1.ResourceList     `json:"requests"`
+    Limits   v1.ResourceList     `json:"limits"`
+}
+
+type ResourceSummary struct {
+    CPURequest    string `json:"cpuRequest"`
+    CPULimit      string `json:"cpuLimit"`
+    MemoryRequest string `json:"memoryRequest"`
+    MemoryLimit   string `json:"memoryLimit"`
+}
+```
+
+### 4.3 Node Utilization Response
+
+```go
+type NodeUtilization struct {
+    NodeName       string  `json:"nodeName"`
+    CPUUsage       string  `json:"cpuUsage"`
+    CPUCapacity    string  `json:"cpuCapacity"`
+    CPUPercentage  float64 `json:"cpuPercentage"`
+    MemoryUsage    string  `json:"memoryUsage"`
+    MemoryCapacity string  `json:"memoryCapacity"`
+    MemoryPercentage float64 `json:"memoryPercentage"`
+    Timestamp      time.Time `json:"timestamp"`
+}
+```
+
+## 5. Configuration Management
+
+### 5.1 Environment Variables
+
+```go
+// Package: internal/config/config.go
+
+type Config struct {
+    // Server configuration
+    Port            int           `env:"PORT" default:"8080"`
+    ReadTimeout     time.Duration `env:"READ_TIMEOUT" default:"10s"`
+    WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" default:"10s"`
+    ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" default:"10s"`
+    
+    // Logging
+    LogLevel string `env:"LOG_LEVEL" default:"info"`
+    LogFormat string `env:"LOG_FORMAT" default:"json"`
+    
+    // Kubernetes
+    K8sTimeout time.Duration `env:"K8S_TIMEOUT" default:"30s"`
+    
+    // Feature flags
+    EnableMetrics bool `env:"ENABLE_METRICS" default:"true"`
+}
+```
+
+### 5.2 Validation
+
+```go
+func (c *Config) Validate() error {
+    if c.Port < 1 || c.Port > 65535 {
+        return fmt.Errorf("invalid port: %d", c.Port)
+    }
+    
+    if c.LogLevel != "debug" && c.LogLevel != "info" && 
+       c.LogLevel != "warn" && c.LogLevel != "error" {
+        return fmt.Errorf("invalid log level: %s", c.LogLevel)
+    }
+    
+    return nil
+}
+```
+
+## 6. Logging Implementation
+
+### 6.1 Logger Setup
+
+```go
+// Package: internal/logging/logger.go
+
+func NewLogger(cfg *config.Config) *slog.Logger {
+    var handler slog.Handler
+    
+    opts := &slog.HandlerOptions{
+        Level: parseLevel(cfg.LogLevel),
+    }
+    
+    switch cfg.LogFormat {
+    case "json":
+        handler = slog.NewJSONHandler(os.Stdout, opts)
+    case "text":
+        handler = slog.NewTextHandler(os.Stdout, opts)
+    default:
+        handler = slog.NewJSONHandler(os.Stdout, opts)
+    }
+    
+    return slog.New(handler)
+}
+```
+
+### 6.2 Request Logging
+
+```go
+func LoggingMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            start := time.Now()
+            ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+            
+            defer func() {
+                logger.Info("http request",
+                    "method", r.Method,
+                    "path", r.URL.Path,
+                    "status", ww.Status(),
+                    "bytes", ww.BytesWritten(),
+                    "duration", time.Since(start),
+                    "request_id", middleware.GetReqID(r.Context()),
+                )
+            }()
+            
+            next.ServeHTTP(ww, r)
+        })
+    }
+}
+```
+
+## 7. Deployment Configuration
+
+### 7.1 ServiceAccount and RBAC
+
+```yaml
+# deployments/base/clusterrole.yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: k8s-cluster-agent
+rules:
+  # Pod permissions
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list"]
+  # Node permissions  
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get"]
+  # Metrics permissions
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes"]
+    verbs: ["get"]
+```
+
+### 7.2 Deployment Spec
+
+```yaml
+# deployments/base/deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-cluster-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: k8s-cluster-agent
+  template:
+    spec:
+      serviceAccountName: k8s-cluster-agent
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
+      containers:
+      - name: agent
+        image: k8s-cluster-agent:latest
+        ports:
+        - containerPort: 8080
+          name: http
+        env:
+        - name: LOG_LEVEL
+          value: "info"
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: http
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+```
+
+## 8. Makefile Targets
+
+```makefile
+# Key targets to implement
+.PHONY: build test docker-build deploy
+
+build:
+	go build -o bin/agent ./cmd/agent
+
+test:
+	go test -v -race -coverprofile=coverage.out ./...
+
+test-integration:
+	go test -v -tags=integration ./test/integration/...
+
+lint:
+	golangci-lint run
+
+docker-build:
+	docker build -f build/docker/Dockerfile -t k8s-cluster-agent:latest .
+
+deploy-dev:
+	kubectl apply -k deployments/overlays/development
+
+deploy-prod:
+	kubectl apply -k deployments/overlays/production
+
+generate-mocks:
+	mockgen -source=internal/core/interfaces.go -destination=internal/core/mocks/mock_services.go
+
+generate-openapi:
+	./scripts/generate-openapi.sh
+```
+
+## 9. Testing Strategy
+
+### 9.1 Unit Test Example
+
+```go
+func TestPodService_GetPodScheduling(t *testing.T) {
+    // Setup
+    ctrl := gomock.NewController(t)
+    defer ctrl.Finish()
+    
+    mockClient := mocks.NewMockInterface(ctrl)
+    logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+    
+    svc := &podService{
+        k8sClient: mockClient,
+        logger:    logger,
+    }
+    
+    // Test data
+    pod := &v1.Pod{
+        ObjectMeta: metav1.ObjectMeta{
+            Name:      "test-pod",
+            Namespace: "default",
+        },
+        Spec: v1.PodSpec{
+            NodeName:      "node-1",
+            SchedulerName: "default-scheduler",
+        },
+    }
+    
+    // Mock expectations
+    mockClient.EXPECT().
+        CoreV1().
+        Return(mockCoreV1).
+        Times(1)
+    
+    // Execute and verify
+    result, err := svc.GetPodScheduling(context.Background(), "default", "test-pod")
+    require.NoError(t, err)
+    assert.Equal(t, "node-1", result.NodeName)
+}
+```
+
+### 9.2 Integration Test Pattern
+
+```go
+// test/integration/api_test.go
+// +build integration
+
+func TestAPI_GetPodDescribe(t *testing.T) {
+    // Setup test server
+    srv := setupTestServer(t)
+    defer srv.Close()
+    
+    // Create test pod in cluster
+    pod := createTestPod(t, "test-namespace", "test-pod")
+    defer deleteTestPod(t, pod)
+    
+    // Make request
+    resp, err := http.Get(srv.URL + "/api/v1/pods/test-namespace/test-pod/describe")
+    require.NoError(t, err)
+    defer resp.Body.Close()
+    
+    // Verify response
+    assert.Equal(t, http.StatusOK, resp.StatusCode)
+    
+    var result map[string]interface{}
+    err = json.NewDecoder(resp.Body).Decode(&result)
+    require.NoError(t, err)
+    
+    assert.Equal(t, "test-pod", result["data"].(map[string]interface{})["metadata"].(map[string]interface{})["name"])
+}
+```

@@ -1,0 +1,14 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+bases:
+  - ../../base
+
+patchesStrategicMerge:
+  - deployment-patch.yaml
+
+configMapGenerator:
+  - name: k8s-cluster-agent-config
+    literals:
+      - LOG_LEVEL=debug
+      - LOG_FORMAT=text 
