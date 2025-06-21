@@ -18,14 +18,12 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 )
 
-// namespaceService implements the NamespaceService interface
 type namespaceService struct {
 	k8sClient           kubernetes.Interface
 	logger              *slog.Logger
 	podRestartThreshold int
 }
 
-// NewNamespaceService creates a new NamespaceService instance
 func NewNamespaceService(k8sClient kubernetes.Interface, cfg *config.Config, logger *slog.Logger) core.NamespaceService {
 	return &namespaceService{
 		k8sClient:           k8sClient,
@@ -34,13 +32,11 @@ func NewNamespaceService(k8sClient kubernetes.Interface, cfg *config.Config, log
 	}
 }
 
-// GetNamespaceErrors analyzes all pods in a namespace for issues
 func (s *namespaceService) GetNamespaceErrors(ctx context.Context, namespace string) (*models.NamespaceErrorReport, error) {
 	s.logger.Debug("analyzing namespace for errors",
 		"namespace", namespace,
 		"restartThreshold", s.podRestartThreshold)
 
-	// Initialize the report
 	report := &models.NamespaceErrorReport{
 		Namespace:            namespace,
 		AnalysisTime:         time.Now(),
@@ -49,20 +45,17 @@ func (s *namespaceService) GetNamespaceErrors(ctx context.Context, namespace str
 		Summary:              []models.NamespaceErrorSummary{},
 	}
 
-	// Get all pods in the namespace
 	pods, err := s.k8sClient.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return report, nil // Return empty report for non-existent namespace
+			return report, nil
 		}
 		return nil, fmt.Errorf("failed to list pods in namespace %s: %w", namespace, err)
 	}
 
-	// Filter pods to only those owned by Deployments or StatefulSets
 	filteredPods := s.filterPodsByOwner(pods.Items)
 	report.TotalPodsAnalyzed = len(filteredPods)
 
-	// Analyze each pod
 	issueSummary := make(map[models.PodIssueType]*models.NamespaceErrorSummary)
 
 	for i := range filteredPods {
@@ -73,7 +66,6 @@ func (s *namespaceService) GetNamespaceErrors(ctx context.Context, namespace str
 			report.ProblematicPods = append(report.ProblematicPods, *problematicPod)
 			report.ProblematicPodsCount++
 
-			// Update issue summary
 			for _, issue := range problematicPod.Issues {
 				if summary, exists := issueSummary[issue.Type]; exists {
 					summary.Count++
@@ -87,7 +79,6 @@ func (s *namespaceService) GetNamespaceErrors(ctx context.Context, namespace str
 					}
 				}
 
-				// Count critical and warning issues
 				switch issue.Severity {
 				case "critical":
 					report.CriticalIssuesCount++
@@ -100,7 +91,6 @@ func (s *namespaceService) GetNamespaceErrors(ctx context.Context, namespace str
 
 	report.HealthyPodsCount = report.TotalPodsAnalyzed - report.ProblematicPodsCount
 
-	// Convert issue summary map to slice and sort by count
 	for _, summary := range issueSummary {
 		report.Summary = append(report.Summary, *summary)
 	}
@@ -108,7 +98,6 @@ func (s *namespaceService) GetNamespaceErrors(ctx context.Context, namespace str
 		return report.Summary[i].Count > report.Summary[j].Count
 	})
 
-	// Sort problematic pods by severity (critical issues first)
 	sort.Slice(report.ProblematicPods, func(i, j int) bool {
 		iCritical := s.hasCriticalIssue(&report.ProblematicPods[i])
 		jCritical := s.hasCriticalIssue(&report.ProblematicPods[j])
@@ -128,14 +117,12 @@ func (s *namespaceService) GetNamespaceErrors(ctx context.Context, namespace str
 	return report, nil
 }
 
-// filterPodsByOwner filters pods to only include those owned by Deployments or StatefulSets
 func (s *namespaceService) filterPodsByOwner(pods []v1.Pod) []v1.Pod {
 	filtered := []v1.Pod{}
 
 	for i := range pods {
 		pod := &pods[i]
 		for _, owner := range pod.OwnerReferences {
-			// Check if the owner is a ReplicaSet (owned by Deployment) or StatefulSet
 			if owner.Kind == "ReplicaSet" || owner.Kind == "StatefulSet" {
 				filtered = append(filtered, *pod)
 				break
@@ -146,7 +133,6 @@ func (s *namespaceService) filterPodsByOwner(pods []v1.Pod) []v1.Pod {
 	return filtered
 }
 
-// analyzePod analyzes a single pod for issues
 func (s *namespaceService) analyzePod(ctx context.Context, pod *v1.Pod) *models.ProblematicPod {
 	now := time.Now()
 	age := now.Sub(pod.CreationTimestamp.Time)
@@ -161,13 +147,10 @@ func (s *namespaceService) analyzePod(ctx context.Context, pod *v1.Pod) *models.
 		Issues:    []models.PodIssue{},
 	}
 
-	// Get owner information
 	s.setOwnerInfo(pod, problematicPod)
 
-	// Get total restart count
 	problematicPod.RestartCount = s.getTotalRestartCount(pod)
 
-	// Check for high restart count
 	if int(problematicPod.RestartCount) > s.podRestartThreshold {
 		problematicPod.Issues = append(problematicPod.Issues, models.PodIssue{
 			Type:        models.PodIssueHighRestarts,
@@ -177,7 +160,6 @@ func (s *namespaceService) analyzePod(ctx context.Context, pod *v1.Pod) *models.
 		})
 	}
 
-	// Check for pending state
 	if pod.Status.Phase == v1.PodPending && age > 5*time.Minute {
 		issue := models.PodIssue{
 			Type:        models.PodIssuePending,
@@ -185,7 +167,6 @@ func (s *namespaceService) analyzePod(ctx context.Context, pod *v1.Pod) *models.
 			Severity:    "critical",
 		}
 
-		// Add scheduling details if available
 		for _, condition := range pod.Status.Conditions {
 			if condition.Type == v1.PodScheduled && condition.Status == v1.ConditionFalse {
 				issue.Details = condition.Message
@@ -201,10 +182,8 @@ func (s *namespaceService) analyzePod(ctx context.Context, pod *v1.Pod) *models.
 		problematicPod.Issues = append(problematicPod.Issues, issue)
 	}
 
-	// Check container statuses
 	s.checkContainerStatuses(pod, problematicPod)
 
-	// Get recent events if there are issues
 	if len(problematicPod.Issues) > 0 {
 		events, err := s.getRecentPodEvents(ctx, pod)
 		if err == nil {
@@ -215,13 +194,10 @@ func (s *namespaceService) analyzePod(ctx context.Context, pod *v1.Pod) *models.
 	return problematicPod
 }
 
-// setOwnerInfo sets the owner information for a pod
 func (s *namespaceService) setOwnerInfo(pod *v1.Pod, problematicPod *models.ProblematicPod) {
 	for _, owner := range pod.OwnerReferences {
 		if owner.Kind == "ReplicaSet" {
-			// For ReplicaSets, we need to get the Deployment owner
 			problematicPod.OwnerKind = "Deployment"
-			// Extract deployment name from ReplicaSet name (deployment-name-<hash>)
 			parts := strings.Split(owner.Name, "-")
 			if len(parts) > 1 {
 				problematicPod.OwnerName = strings.Join(parts[:len(parts)-1], "-")
@@ -237,7 +213,6 @@ func (s *namespaceService) setOwnerInfo(pod *v1.Pod, problematicPod *models.Prob
 	}
 }
 
-// getTotalRestartCount calculates the total restart count across all containers
 func (s *namespaceService) getTotalRestartCount(pod *v1.Pod) int32 {
 	var totalRestarts int32
 
@@ -254,7 +229,6 @@ func (s *namespaceService) getTotalRestartCount(pod *v1.Pod) int32 {
 	return totalRestarts
 }
 
-// getRestartDetails provides details about container restarts
 func (s *namespaceService) getRestartDetails(pod *v1.Pod) string {
 	details := []string{}
 
@@ -271,11 +245,9 @@ func (s *namespaceService) getRestartDetails(pod *v1.Pod) string {
 	return ""
 }
 
-// checkContainerStatuses checks for container-specific issues
 func (s *namespaceService) checkContainerStatuses(pod *v1.Pod, problematicPod *models.ProblematicPod) {
 	for i := range pod.Status.ContainerStatuses {
 		status := &pod.Status.ContainerStatuses[i]
-		// Check for CrashLoopBackOff
 		if status.State.Waiting != nil && status.State.Waiting.Reason == "CrashLoopBackOff" {
 			problematicPod.Issues = append(problematicPod.Issues, models.PodIssue{
 				Type:        models.PodIssueCrashLoop,
@@ -285,7 +257,6 @@ func (s *namespaceService) checkContainerStatuses(pod *v1.Pod, problematicPod *m
 			})
 		}
 
-		// Check for ImagePullBackOff
 		if status.State.Waiting != nil &&
 			(status.State.Waiting.Reason == "ImagePullBackOff" || status.State.Waiting.Reason == "ErrImagePull") {
 			problematicPod.Issues = append(problematicPod.Issues, models.PodIssue{
@@ -296,7 +267,6 @@ func (s *namespaceService) checkContainerStatuses(pod *v1.Pod, problematicPod *m
 			})
 		}
 
-		// Check for terminated containers with error
 		if status.State.Terminated != nil && status.State.Terminated.ExitCode != 0 {
 			problematicPod.Issues = append(problematicPod.Issues, models.PodIssue{
 				Type:        models.PodIssueFailed,
@@ -308,9 +278,7 @@ func (s *namespaceService) checkContainerStatuses(pod *v1.Pod, problematicPod *m
 	}
 }
 
-// getRecentPodEvents gets recent events for a pod
 func (s *namespaceService) getRecentPodEvents(ctx context.Context, pod *v1.Pod) ([]models.EventInfo, error) {
-	// Get events for this pod
 	fieldSelector := fmt.Sprintf("involvedObject.kind=Pod,involvedObject.name=%s,involvedObject.namespace=%s",
 		pod.Name, pod.Namespace)
 
@@ -321,7 +289,6 @@ func (s *namespaceService) getRecentPodEvents(ctx context.Context, pod *v1.Pod) 
 		return nil, err
 	}
 
-	// Filter to recent events (last hour) and warning/error types
 	events := []models.EventInfo{}
 	cutoff := time.Now().Add(-1 * time.Hour)
 
@@ -340,12 +307,10 @@ func (s *namespaceService) getRecentPodEvents(ctx context.Context, pod *v1.Pod) 
 		}
 	}
 
-	// Sort by last timestamp (most recent first)
 	sort.Slice(events, func(i, j int) bool {
 		return events[i].LastTimestamp.After(events[j].LastTimestamp.Time)
 	})
 
-	// Limit to 5 most recent events
 	if len(events) > 5 {
 		events = events[:5]
 	}
@@ -353,7 +318,6 @@ func (s *namespaceService) getRecentPodEvents(ctx context.Context, pod *v1.Pod) 
 	return events, nil
 }
 
-// hasCriticalIssue checks if a pod has any critical issues
 func (s *namespaceService) hasCriticalIssue(pod *models.ProblematicPod) bool {
 	for _, issue := range pod.Issues {
 		if issue.Severity == "critical" {
@@ -363,7 +327,6 @@ func (s *namespaceService) hasCriticalIssue(pod *models.ProblematicPod) bool {
 	return false
 }
 
-// getIssueTypeDescription returns a human-readable description for an issue type
 func (s *namespaceService) getIssueTypeDescription(issueType models.PodIssueType) string {
 	descriptions := map[models.PodIssueType]string{
 		models.PodIssueHighRestarts:        "Pods with excessive restart counts",
@@ -381,7 +344,6 @@ func (s *namespaceService) getIssueTypeDescription(issueType models.PodIssueType
 	return string(issueType)
 }
 
-// formatDuration formats a duration into a human-readable string
 func (s *namespaceService) formatDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))

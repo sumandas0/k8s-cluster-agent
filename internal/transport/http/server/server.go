@@ -9,13 +9,11 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/config"
 )
 
-// Server represents the HTTP server
 type Server struct {
 	server *http.Server
 	logger *slog.Logger
 }
 
-// New creates a new HTTP server instance
 func New(cfg *config.Config, handler http.Handler, logger *slog.Logger) *Server {
 	return &Server{
 		server: &http.Server{
@@ -28,7 +26,6 @@ func New(cfg *config.Config, handler http.Handler, logger *slog.Logger) *Server 
 	}
 }
 
-// Start starts the HTTP server
 func (s *Server) Start() error {
 	s.logger.Info("starting HTTP server", "addr", s.server.Addr)
 
@@ -39,7 +36,6 @@ func (s *Server) Start() error {
 	return nil
 }
 
-// Shutdown gracefully shuts down the server
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info("shutting down HTTP server")
 

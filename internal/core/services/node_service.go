@@ -17,14 +17,12 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 )
 
-// nodeService implements the NodeService interface
 type nodeService struct {
 	k8sClient     kubernetes.Interface
 	metricsClient metricsclientset.Interface
 	logger        *slog.Logger
 }
 
-// NewNodeService creates a new NodeService instance
 func NewNodeService(k8sClient kubernetes.Interface, metricsClient metricsclientset.Interface, logger *slog.Logger) core.NodeService {
 	return &nodeService{
 		k8sClient:     k8sClient,
@@ -33,11 +31,9 @@ func NewNodeService(k8sClient kubernetes.Interface, metricsClient metricsclients
 	}
 }
 
-// GetNodeUtilization returns the current resource utilization for a node
 func (s *nodeService) GetNodeUtilization(ctx context.Context, nodeName string) (*models.NodeUtilization, error) {
 	s.logger.Debug("getting node utilization", "node", nodeName)
 
-	// First, check if the node exists
 	node, err := s.k8sClient.CoreV1().Nodes().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -51,13 +47,11 @@ func (s *nodeService) GetNodeUtilization(ctx context.Context, nodeName string) (
 		return nil, fmt.Errorf("failed to get node %s: %w", nodeName, err)
 	}
 
-	// Check if metrics are available
 	if !s.checkMetricsAvailable(ctx) {
 		s.logger.Warn("metrics server not available", "node", nodeName)
 		return nil, core.ErrMetricsNotAvailable
 	}
 
-	// Get node metrics
 	nodeMetrics, err := s.metricsClient.MetricsV1beta1().NodeMetricses().Get(ctx, nodeName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -71,15 +65,12 @@ func (s *nodeService) GetNodeUtilization(ctx context.Context, nodeName string) (
 		return nil, fmt.Errorf("failed to get metrics for node %s: %w", nodeName, err)
 	}
 
-	// Get capacity from the node
 	cpuCapacity := node.Status.Capacity[v1.ResourceCPU]
 	memoryCapacity := node.Status.Capacity[v1.ResourceMemory]
 
-	// Get usage from metrics
 	cpuUsage := nodeMetrics.Usage[v1.ResourceCPU]
 	memoryUsage := nodeMetrics.Usage[v1.ResourceMemory]
 
-	// Calculate percentages
 	cpuPercentage := calculatePercentage(&cpuUsage, &cpuCapacity)
 	memoryPercentage := calculatePercentage(&memoryUsage, &memoryCapacity)
 
@@ -103,14 +94,12 @@ func (s *nodeService) GetNodeUtilization(ctx context.Context, nodeName string) (
 	return result, nil
 }
 
-// checkMetricsAvailable checks if the metrics server is available
 func (s *nodeService) checkMetricsAvailable(ctx context.Context) bool {
 	if s.metricsClient == nil {
 		s.logger.Debug("metrics client is nil")
 		return false
 	}
 
-	// Try to list metrics to check availability
 	_, err := s.metricsClient.MetricsV1beta1().NodeMetricses().List(ctx, metav1.ListOptions{Limit: 1})
 	if err != nil {
 		s.logger.Debug("metrics server check failed", "error", err.Error())
@@ -120,7 +109,6 @@ func (s *nodeService) checkMetricsAvailable(ctx context.Context) bool {
 	return true
 }
 
-// calculatePercentage calculates the percentage of usage vs capacity
 func calculatePercentage(usage, capacity *resource.Quantity) float64 {
 	if usage == nil || capacity == nil {
 		return 0
@@ -130,7 +118,6 @@ func calculatePercentage(usage, capacity *resource.Quantity) float64 {
 		return 0
 	}
 
-	// Convert to float64 for percentage calculation
 	usageFloat := float64(usage.MilliValue())
 	capacityFloat := float64(capacity.MilliValue())
 
@@ -140,7 +127,6 @@ func calculatePercentage(usage, capacity *resource.Quantity) float64 {
 
 	percentage := (usageFloat / capacityFloat) * 100
 
-	// Ensure percentage is not negative or greater than 100
 	if percentage < 0 {
 		return 0
 	}

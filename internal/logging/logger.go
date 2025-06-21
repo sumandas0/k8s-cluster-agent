@@ -7,7 +7,6 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/config"
 )
 
-// NewLogger creates a new structured logger based on configuration
 func NewLogger(cfg *config.Config) *slog.Logger {
 	var handler slog.Handler
 
@@ -26,7 +25,6 @@ func NewLogger(cfg *config.Config) *slog.Logger {
 
 	logger := slog.New(handler)
 
-	// Add node name as default attribute if running in DaemonSet mode
 	if cfg.NodeName != "" {
 		logger = logger.With("node", cfg.NodeName)
 	}
@@ -34,7 +32,6 @@ func NewLogger(cfg *config.Config) *slog.Logger {
 	return logger
 }
 
-// parseLevel converts string log level to slog.Level
 func parseLevel(level string) slog.Level {
 	switch level {
 	case "debug":

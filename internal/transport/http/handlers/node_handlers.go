@@ -14,13 +14,11 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
-// NodeHandlers contains node-related HTTP handlers
 type NodeHandlers struct {
 	nodeService core.NodeService
 	logger      *slog.Logger
 }
 
-// NewNodeHandlers creates a new NodeHandlers instance
 func NewNodeHandlers(nodeService core.NodeService, logger *slog.Logger) *NodeHandlers {
 	return &NodeHandlers{
 		nodeService: nodeService,
@@ -28,12 +26,10 @@ func NewNodeHandlers(nodeService core.NodeService, logger *slog.Logger) *NodeHan
 	}
 }
 
-// GetNodeUtilization handles GET /api/v1/nodes/{nodeName}/utilization
 func (h *NodeHandlers) GetNodeUtilization(w http.ResponseWriter, r *http.Request) {
 	nodeName := chi.URLParam(r, "nodeName")
 	requestID := middleware.GetReqID(r.Context())
 
-	// Validate input
 	if err := validateNodeParams(nodeName); err != nil {
 		h.logger.Warn("invalid node utilization request",
 			"node", nodeName,
@@ -44,7 +40,6 @@ func (h *NodeHandlers) GetNodeUtilization(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Get node utilization
 	utilization, err := h.nodeService.GetNodeUtilization(r.Context(), nodeName)
 	if err != nil {
 		h.handleServiceError(w, r, err, "failed to get node utilization", nodeName)
@@ -56,11 +51,9 @@ func (h *NodeHandlers) GetNodeUtilization(w http.ResponseWriter, r *http.Request
 		"request_id", requestID,
 	)
 
-	// Write response
 	responses.WriteJSON(w, responses.Success(utilization))
 }
 
-// validateNodeParams validates node-related request parameters
 func validateNodeParams(nodeName string) error {
 	if nodeName == "" {
 		return fmt.Errorf("node name is required")
@@ -68,7 +61,6 @@ func validateNodeParams(nodeName string) error {
 	return nil
 }
 
-// handleServiceError maps service errors to HTTP responses and logs detailed error information
 func (h *NodeHandlers) handleServiceError(w http.ResponseWriter, r *http.Request, err error, operation, nodeName string) {
 	requestID := middleware.GetReqID(r.Context())
 
@@ -106,7 +98,6 @@ func (h *NodeHandlers) handleServiceError(w http.ResponseWriter, r *http.Request
 		)
 		responses.WriteTimeout(w, "Request timeout")
 	default:
-		// Log the actual error for internal debugging but don't expose to client
 		h.logger.Error("internal server error",
 			"operation", operation,
 			"node", nodeName,

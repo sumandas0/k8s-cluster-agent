@@ -14,13 +14,11 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
-// PodHandlers contains pod-related HTTP handlers
 type PodHandlers struct {
 	podService core.PodService
 	logger     *slog.Logger
 }
 
-// NewPodHandlers creates a new PodHandlers instance
 func NewPodHandlers(podService core.PodService, logger *slog.Logger) *PodHandlers {
 	return &PodHandlers{
 		podService: podService,
@@ -28,13 +26,11 @@ func NewPodHandlers(podService core.PodService, logger *slog.Logger) *PodHandler
 	}
 }
 
-// GetPodDescribe handles GET /api/v1/pods/{namespace}/{podName}/describe
 func (h *PodHandlers) GetPodDescribe(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	podName := chi.URLParam(r, "podName")
 	requestID := middleware.GetReqID(r.Context())
 
-	// Validate input
 	if err := validatePodParams(namespace, podName); err != nil {
 		h.logger.Warn("invalid pod describe request",
 			"namespace", namespace,
@@ -46,7 +42,6 @@ func (h *PodHandlers) GetPodDescribe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get pod description
 	description, err := h.podService.GetPodDescription(r.Context(), namespace, podName)
 	if err != nil {
 		h.handleServiceError(w, r, err, "failed to get pod description", namespace, podName)
@@ -59,17 +54,14 @@ func (h *PodHandlers) GetPodDescribe(w http.ResponseWriter, r *http.Request) {
 		"request_id", requestID,
 	)
 
-	// Write response
 	responses.WriteJSON(w, responses.Success(description))
 }
 
-// GetPodScheduling handles GET /api/v1/pods/{namespace}/{podName}/scheduling
 func (h *PodHandlers) GetPodScheduling(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	podName := chi.URLParam(r, "podName")
 	requestID := middleware.GetReqID(r.Context())
 
-	// Validate input
 	if err := validatePodParams(namespace, podName); err != nil {
 		h.logger.Warn("invalid pod scheduling request",
 			"namespace", namespace,
@@ -81,7 +73,6 @@ func (h *PodHandlers) GetPodScheduling(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get pod scheduling info
 	scheduling, err := h.podService.GetPodScheduling(r.Context(), namespace, podName)
 	if err != nil {
 		h.handleServiceError(w, r, err, "failed to get pod scheduling", namespace, podName)
@@ -94,17 +85,14 @@ func (h *PodHandlers) GetPodScheduling(w http.ResponseWriter, r *http.Request) {
 		"request_id", requestID,
 	)
 
-	// Write response
 	responses.WriteJSON(w, responses.Success(scheduling))
 }
 
-// GetPodResources handles GET /api/v1/pods/{namespace}/{podName}/resources
 func (h *PodHandlers) GetPodResources(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	podName := chi.URLParam(r, "podName")
 	requestID := middleware.GetReqID(r.Context())
 
-	// Validate input
 	if err := validatePodParams(namespace, podName); err != nil {
 		h.logger.Warn("invalid pod resources request",
 			"namespace", namespace,
@@ -116,7 +104,6 @@ func (h *PodHandlers) GetPodResources(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get pod resources
 	resources, err := h.podService.GetPodResources(r.Context(), namespace, podName)
 	if err != nil {
 		h.handleServiceError(w, r, err, "failed to get pod resources", namespace, podName)
@@ -129,17 +116,14 @@ func (h *PodHandlers) GetPodResources(w http.ResponseWriter, r *http.Request) {
 		"request_id", requestID,
 	)
 
-	// Write response
 	responses.WriteJSON(w, responses.Success(resources))
 }
 
-// GetPodFailureEvents handles GET /api/v1/pods/{namespace}/{podName}/failure-events
 func (h *PodHandlers) GetPodFailureEvents(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	podName := chi.URLParam(r, "podName")
 	requestID := middleware.GetReqID(r.Context())
 
-	// Validate input
 	if err := validatePodParams(namespace, podName); err != nil {
 		h.logger.Warn("invalid pod failure events request",
 			"namespace", namespace,
@@ -151,7 +135,6 @@ func (h *PodHandlers) GetPodFailureEvents(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Get pod failure events
 	failureEvents, err := h.podService.GetPodFailureEvents(r.Context(), namespace, podName)
 	if err != nil {
 		h.handleServiceError(w, r, err, "failed to get pod failure events", namespace, podName)
@@ -167,11 +150,9 @@ func (h *PodHandlers) GetPodFailureEvents(w http.ResponseWriter, r *http.Request
 		"request_id", requestID,
 	)
 
-	// Write response
 	responses.WriteJSON(w, responses.Success(failureEvents))
 }
 
-// validatePodParams validates pod-related request parameters
 func validatePodParams(namespace, podName string) error {
 	if namespace == "" {
 		return fmt.Errorf("namespace is required")
@@ -182,7 +163,6 @@ func validatePodParams(namespace, podName string) error {
 	return nil
 }
 
-// handleServiceError maps service errors to HTTP responses and logs detailed error information
 func (h *PodHandlers) handleServiceError(w http.ResponseWriter, r *http.Request, err error, operation, namespace, podName string) {
 	requestID := middleware.GetReqID(r.Context())
 
@@ -224,7 +204,6 @@ func (h *PodHandlers) handleServiceError(w http.ResponseWriter, r *http.Request,
 		)
 		responses.WriteTimeout(w, "Request timeout")
 	default:
-		// Log the actual error for internal debugging but don't expose to client
 		h.logger.Error("internal server error",
 			"operation", operation,
 			"namespace", namespace,

@@ -21,7 +21,6 @@ import (
 )
 
 func TestPodService_GetPod(t *testing.T) {
-	// Create test pod
 	testPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -32,13 +31,10 @@ func TestPodService_GetPod(t *testing.T) {
 		},
 	}
 
-	// Create fake client with test pod
 	fakeClient := fake.NewSimpleClientset(testPod)
 
-	// Create service
 	svc := NewPodService(fakeClient, slog.Default())
 
-	// Test successful get
 	pod, err := svc.GetPod(context.Background(), "default", "test-pod")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -48,7 +44,6 @@ func TestPodService_GetPod(t *testing.T) {
 		t.Errorf("expected pod name 'test-pod', got '%s'", pod.Name)
 	}
 
-	// Test pod not found
 	_, err = svc.GetPod(context.Background(), "default", "non-existent")
 	if err != core.ErrPodNotFound {
 		t.Errorf("expected ErrPodNotFound, got %v", err)
@@ -56,7 +51,6 @@ func TestPodService_GetPod(t *testing.T) {
 }
 
 func TestPodService_GetPodDescription(t *testing.T) {
-	// Create a comprehensive test pod with various fields
 	testPod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-pod",
@@ -187,7 +181,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		},
 	}
 
-	// Create test events
 	testEvent := &v1.Event{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-event",
@@ -210,19 +203,15 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		},
 	}
 
-	// Create fake client with test pod and event
 	fakeClient := fake.NewSimpleClientset(testPod, testEvent)
 
-	// Create service
 	svc := NewPodService(fakeClient, slog.Default())
 
-	// Test successful description
 	description, err := svc.GetPodDescription(context.Background(), "default", "test-pod")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	// Validate basic information
 	if description.Name != "test-pod" {
 		t.Errorf("expected name 'test-pod', got '%s'", description.Name)
 	}
@@ -233,7 +222,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Errorf("expected node 'test-node', got '%s'", description.Node)
 	}
 
-	// Validate labels and annotations
 	if len(description.Labels) != 2 {
 		t.Errorf("expected 2 labels, got %d", len(description.Labels))
 	}
@@ -244,7 +232,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Errorf("expected 2 annotations, got %d", len(description.Annotations))
 	}
 
-	// Validate status
 	if description.Status.Phase != "Running" {
 		t.Errorf("expected phase 'Running', got '%s'", description.Status.Phase)
 	}
@@ -252,7 +239,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Errorf("expected podIP '10.244.1.5', got '%s'", description.Status.PodIP)
 	}
 
-	// Validate containers
 	if len(description.Containers) != 1 {
 		t.Errorf("expected 1 container, got %d", len(description.Containers))
 	}
@@ -267,7 +253,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Error("expected container to be ready")
 	}
 
-	// Validate init containers
 	if len(description.InitContainers) != 1 {
 		t.Errorf("expected 1 init container, got %d", len(description.InitContainers))
 	}
@@ -276,12 +261,10 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Errorf("expected init container name 'init-container', got '%s'", initContainer.Name)
 	}
 
-	// Validate volumes
 	if len(description.Volumes) != 2 {
 		t.Errorf("expected 2 volumes, got %d", len(description.Volumes))
 	}
 
-	// Find the ConfigMap volume
 	var configMapVolume *v1.VolumeSource
 	for _, vol := range description.Volumes {
 		if vol.Name == "config-volume" {
@@ -296,7 +279,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Error("config-volume not found")
 	}
 
-	// Validate QoS and Priority
 	if description.QOSClass != "Burstable" {
 		t.Errorf("expected QoS class 'Burstable', got '%s'", description.QOSClass)
 	}
@@ -304,7 +286,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Errorf("expected priority 100, got %v", description.Priority)
 	}
 
-	// Validate tolerations and node selector
 	if len(description.Tolerations) != 1 {
 		t.Errorf("expected 1 toleration, got %d", len(description.Tolerations))
 	}
@@ -315,12 +296,10 @@ func TestPodService_GetPodDescription(t *testing.T) {
 		t.Errorf("expected node selector zone='us-west-1', got '%s'", description.NodeSelector["zone"])
 	}
 
-	// Validate conditions
 	if len(description.Conditions) != 1 {
 		t.Errorf("expected 1 condition, got %d", len(description.Conditions))
 	}
 
-	// Test pod not found
 	_, err = svc.GetPodDescription(context.Background(), "default", "non-existent")
 	if err != core.ErrPodNotFound {
 		t.Errorf("expected ErrPodNotFound, got %v", err)
@@ -328,7 +307,6 @@ func TestPodService_GetPodDescription(t *testing.T) {
 }
 
 func TestGetPodFailureEvents(t *testing.T) {
-	// Helper function to create test events
 	createTestEvent := func(reason, message, eventType string, count int32, firstTime, lastTime time.Time) v1.Event {
 		return v1.Event{
 			TypeMeta: metav1.TypeMeta{
@@ -357,7 +335,6 @@ func TestGetPodFailureEvents(t *testing.T) {
 		}
 	}
 
-	// Create test times
 	now := time.Now()
 	oneHourAgo := now.Add(-1 * time.Hour)
 	twoHoursAgo := now.Add(-2 * time.Hour)
@@ -408,18 +385,16 @@ func TestGetPodFailureEvents(t *testing.T) {
 				assert.Equal(t, "test-pod", result.PodName)
 				assert.Equal(t, "test-namespace", result.Namespace)
 				assert.Equal(t, 3, result.TotalEvents)
-				assert.Equal(t, 2, len(result.FailureEvents)) // Only failure events
+				assert.Equal(t, 2, len(result.FailureEvents))
 				assert.Equal(t, 2, result.CriticalEvents)
 				assert.Equal(t, 0, result.WarningEvents)
 				assert.NotNil(t, result.MostRecentIssue)
 				assert.Equal(t, "FailedScheduling", result.MostRecentIssue.Reason)
 
-				// Check categories
 				assert.Equal(t, 2, len(result.EventCategories))
 				assert.Equal(t, 1, result.EventCategories[models.FailureEventCategoryCrash])
 				assert.Equal(t, 1, result.EventCategories[models.FailureEventCategoryScheduling])
 
-				// Check ongoing issues
 				assert.Greater(t, len(result.OngoingIssues), 0)
 			},
 		},
@@ -446,11 +421,9 @@ func TestGetPodFailureEvents(t *testing.T) {
 				assert.Equal(t, 2, len(result.FailureEvents))
 				assert.Equal(t, 2, result.CriticalEvents)
 
-				// Check categories
 				assert.Equal(t, 1, len(result.EventCategories))
 				assert.Equal(t, 2, result.EventCategories[models.FailureEventCategoryImagePull])
 
-				// Check recurrence info
 				imagePullEvent := result.FailureEvents[0]
 				assert.True(t, imagePullEvent.IsRecurring)
 				assert.NotEmpty(t, imagePullEvent.RecurrenceRate)
@@ -498,7 +471,6 @@ func TestGetPodFailureEvents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create fake clientset
 			var objects []runtime.Object
 			if tt.pod != nil {
 				objects = append(objects, tt.pod)
@@ -510,16 +482,12 @@ func TestGetPodFailureEvents(t *testing.T) {
 			}
 			fakeClient := fake.NewSimpleClientset(objects...)
 
-			// Create logger
 			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 
-			// Create service
 			svc := NewPodService(fakeClient, logger)
 
-			// Call method
 			result, err := svc.GetPodFailureEvents(context.Background(), tt.namespace, tt.podName)
 
-			// Validate error
 			if tt.expectedError != nil {
 				assert.Error(t, err)
 				assert.True(t, errors.Is(err, tt.expectedError))
@@ -557,8 +525,7 @@ func TestAnalyzeFailureEvents(t *testing.T) {
 			Message:        "Back-off restarting container",
 			FirstTimestamp: metav1.Time{Time: now.Add(-1 * time.Hour)},
 			LastTimestamp:  metav1.Time{Time: now.Add(-10 * time.Minute)},
-			Count:          10, // High count makes it a failure event
-		},
+			Count:          10},
 	}
 
 	pod := &v1.Pod{
@@ -571,13 +538,11 @@ func TestAnalyzeFailureEvents(t *testing.T) {
 
 	assert.Equal(t, 2, len(results))
 
-	// OOMKilled should be first (critical severity)
 	assert.Equal(t, "OOMKilled", results[0].Reason)
 	assert.Equal(t, models.FailureEventCategoryResource, results[0].Category)
 	assert.Equal(t, "critical", results[0].Severity)
 	assert.True(t, results[0].IsRecurring)
 
-	// BackOff should be second
 	assert.Equal(t, "BackOff", results[1].Reason)
 	assert.Equal(t, models.FailureEventCategoryCrash, results[1].Category)
 }

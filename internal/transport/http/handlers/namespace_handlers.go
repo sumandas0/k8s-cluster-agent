@@ -12,13 +12,11 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
-// NamespaceHandlers contains namespace-related HTTP handlers
 type NamespaceHandlers struct {
 	namespaceService core.NamespaceService
 	logger           *slog.Logger
 }
 
-// NewNamespaceHandlers creates a new NamespaceHandlers instance
 func NewNamespaceHandlers(namespaceService core.NamespaceService, logger *slog.Logger) *NamespaceHandlers {
 	return &NamespaceHandlers{
 		namespaceService: namespaceService,
@@ -26,12 +24,10 @@ func NewNamespaceHandlers(namespaceService core.NamespaceService, logger *slog.L
 	}
 }
 
-// GetNamespaceErrors handles GET /api/v1/namespace/{namespace}/error
 func (h *NamespaceHandlers) GetNamespaceErrors(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	requestID := middleware.GetReqID(r.Context())
 
-	// Validate input
 	if err := validateNamespace(namespace); err != nil {
 		h.logger.Warn("invalid namespace error request",
 			"namespace", namespace,
@@ -42,7 +38,6 @@ func (h *NamespaceHandlers) GetNamespaceErrors(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Get namespace error report
 	report, err := h.namespaceService.GetNamespaceErrors(r.Context(), namespace)
 	if err != nil {
 		h.logger.Error("failed to get namespace errors",
@@ -54,7 +49,6 @@ func (h *NamespaceHandlers) GetNamespaceErrors(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Write successful response
 	response := responses.SuccessResponse{
 		Data: report,
 		Metadata: responses.Metadata{
@@ -72,7 +66,6 @@ func (h *NamespaceHandlers) GetNamespaceErrors(w http.ResponseWriter, r *http.Re
 	)
 }
 
-// validateNamespace validates namespace parameter
 func validateNamespace(namespace string) error {
 	if namespace == "" {
 		return errors.New("namespace is required")
@@ -80,7 +73,6 @@ func validateNamespace(namespace string) error {
 	if len(namespace) > 253 {
 		return errors.New("namespace name is too long")
 	}
-	// Note: Full RFC 1123 validation could be added here
 	return nil
 }
 

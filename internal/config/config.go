@@ -7,32 +7,24 @@ import (
 	"time"
 )
 
-// Config holds the application configuration
 type Config struct {
-	// Server configuration
 	Port            int           `env:"PORT" default:"8080"`
 	ReadTimeout     time.Duration `env:"READ_TIMEOUT" default:"10s"`
 	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" default:"10s"`
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" default:"10s"`
 
-	// Logging
 	LogLevel  string `env:"LOG_LEVEL" default:"info"`
 	LogFormat string `env:"LOG_FORMAT" default:"json"`
 
-	// Kubernetes
 	K8sTimeout time.Duration `env:"K8S_TIMEOUT" default:"30s"`
 
-	// Node information (for DaemonSet deployment)
 	NodeName string `env:"NODE_NAME" default:""`
 
-	// Feature flags
 	EnableMetrics bool `env:"ENABLE_METRICS" default:"true"`
 
-	// Analysis thresholds
 	PodRestartThreshold int `env:"POD_RESTART_THRESHOLD" default:"5"`
 }
 
-// Load reads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                getEnvAsInt("PORT", 8080),
@@ -54,7 +46,6 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
-// Validate checks if the configuration is valid
 func (c *Config) Validate() error {
 	if c.Port < 1 || c.Port > 65535 {
 		return fmt.Errorf("invalid port: %d", c.Port)
@@ -76,7 +67,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Helper functions to read environment variables with defaults
 
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {

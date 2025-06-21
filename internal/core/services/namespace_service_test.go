@@ -91,7 +91,7 @@ func TestNamespaceService_GetNamespaceErrors(t *testing.T) {
 			},
 			expectedTotalPods:   1,
 			expectedProblematic: 1,
-			expectedCritical:    2, // 1 for pending > 5 minutes, 1 for image pull error
+			expectedCritical:    2,
 		},
 		{
 			name:             "mixed healthy and problematic",
@@ -101,11 +101,11 @@ func TestNamespaceService_GetNamespaceErrors(t *testing.T) {
 				createPod("test-ns", "healthy-1", "deployment", "Running", 0, 0),
 				createPod("test-ns", "restart-pod", "deployment", "Running", 0, 5),
 				createCrashLoopPod("test-ns", "crash-pod", "statefulset"),
-				createPod("test-ns", "job-pod", "job", "Running", 0, 10), // Should be filtered out
+				createPod("test-ns", "job-pod", "job", "Running", 0, 10),
 			},
-			expectedTotalPods:   3, // job-pod excluded
+			expectedTotalPods:   3,
 			expectedProblematic: 2,
-			expectedCritical:    3, // restart-pod has 1 high restart issue, crash-pod has 1 crashloop + 1 high restart
+			expectedCritical:    3,
 		},
 		{
 			name:             "configurable restart threshold",
@@ -123,23 +123,18 @@ func TestNamespaceService_GetNamespaceErrors(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create fake client
 			fakeClient := fake.NewSimpleClientset(append(tt.pods, tt.events...)...)
 
-			// Create config with test restart threshold
 			cfg := &config.Config{
 				PodRestartThreshold: tt.restartThreshold,
 			}
 
-			// Create service
 			logger := slog.Default()
 			service := NewNamespaceService(fakeClient, cfg, logger)
 
-			// Call method
 			ctx := context.Background()
 			report, err := service.GetNamespaceErrors(ctx, tt.namespace)
 
-			// Check error
 			if tt.expectedError {
 				assert.Error(t, err)
 				return
@@ -147,7 +142,6 @@ func TestNamespaceService_GetNamespaceErrors(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, report)
 
-			// Verify results
 			assert.Equal(t, tt.namespace, report.Namespace)
 			assert.Equal(t, tt.restartThreshold, report.RestartThresholdUsed)
 			assert.Equal(t, tt.expectedTotalPods, report.TotalPodsAnalyzed)
@@ -185,7 +179,7 @@ func TestNamespaceService_filterPodsByOwner(t *testing.T) {
 				*createPod("ns", "job-pod", "job", "Running", 0, 0),
 				*createPod("ns", "daemonset-pod", "daemonset", "Running", 0, 0),
 			},
-			expected: 2, // Only deployment and statefulset
+			expected: 2,
 		},
 		{
 			name: "no owner references",
@@ -255,7 +249,6 @@ func TestNamespaceService_analyzePod(t *testing.T) {
 			logger := slog.Default()
 			fakeClient := fake.NewSimpleClientset()
 
-			// Mock event listing to return empty
 			fakeClient.PrependReactor("list", "events", func(action ktesting.Action) (bool, runtime.Object, error) {
 				return true, &v1.EventList{Items: []v1.Event{}}, nil
 			})
@@ -279,7 +272,6 @@ func TestNamespaceService_analyzePod(t *testing.T) {
 	}
 }
 
-// Helper functions to create test pods
 
 func createPod(namespace, name, ownerKind, phase string, _, restartCount int32) *v1.Pod {
 	pod := &v1.Pod{
@@ -307,7 +299,6 @@ func createPod(namespace, name, ownerKind, phase string, _, restartCount int32) 
 		},
 	}
 
-	// Add owner reference based on kind
 	switch ownerKind {
 	case "deployment":
 		pod.OwnerReferences = []metav1.OwnerReference{

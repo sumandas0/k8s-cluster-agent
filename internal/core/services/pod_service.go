@@ -20,20 +20,17 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 )
 
-// Constants for pod scheduling status
 const (
 	SchedulingStatusScheduled = "Scheduled"
 	SchedulingStatusPending   = "Pending"
 	SchedulingStatusFailed    = "Failed"
 )
 
-// podService implements the PodService interface
 type podService struct {
 	k8sClient kubernetes.Interface
 	logger    *slog.Logger
 }
 
-// NewPodService creates a new PodService instance
 func NewPodService(k8sClient kubernetes.Interface, logger *slog.Logger) core.PodService {
 	return &podService{
 		k8sClient: k8sClient,
@@ -41,7 +38,6 @@ func NewPodService(k8sClient kubernetes.Interface, logger *slog.Logger) core.Pod
 	}
 }
 
-// GetPod returns the full pod specification and status
 func (s *podService) GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error) {
 	s.logger.Debug("getting pod", "namespace", namespace, "pod", name)
 
@@ -63,7 +59,6 @@ func (s *podService) GetPod(ctx context.Context, namespace, name string) (*v1.Po
 	return pod, nil
 }
 
-// GetPodScheduling returns scheduling-specific information for a pod
 func (s *podService) GetPodScheduling(ctx context.Context, namespace, name string) (*models.PodScheduling, error) {
 	s.logger.Debug("getting pod scheduling info", "namespace", namespace, "pod", name)
 
@@ -83,7 +78,6 @@ func (s *podService) GetPodScheduling(ctx context.Context, namespace, name strin
 		Conditions:        pod.Status.Conditions,
 	}
 
-	// Determine pod scheduling status
 	if pod.Spec.NodeName != "" {
 		scheduling.Status = SchedulingStatusScheduled
 	} else if pod.Status.Phase == v1.PodPending {
@@ -92,7 +86,6 @@ func (s *podService) GetPodScheduling(ctx context.Context, namespace, name strin
 		scheduling.Status = SchedulingStatusFailed
 	}
 
-	// Get scheduling events
 	events, err := s.getSchedulingEvents(ctx, namespace, name)
 	if err != nil {
 		s.logger.Warn("failed to get scheduling events",
@@ -103,7 +96,6 @@ func (s *podService) GetPodScheduling(ctx context.Context, namespace, name strin
 		scheduling.Events = events
 	}
 
-	// If pod is scheduled, explain why it was placed on the current node
 	if scheduling.Status == SchedulingStatusScheduled && pod.Spec.NodeName != "" {
 		node, err := s.k8sClient.CoreV1().Nodes().Get(ctx, pod.Spec.NodeName, metav1.GetOptions{})
 		if err != nil {
@@ -115,7 +107,6 @@ func (s *podService) GetPodScheduling(ctx context.Context, namespace, name strin
 		}
 	}
 
-	// If pod is pending, analyze why it can't be scheduled on each node
 	if scheduling.Status == SchedulingStatusPending {
 		unschedulableNodes, err := s.analyzeUnschedulableNodes(ctx, pod)
 		if err != nil {
@@ -126,10 +117,8 @@ func (s *podService) GetPodScheduling(ctx context.Context, namespace, name strin
 		} else {
 			scheduling.UnschedulableNodes = unschedulableNodes
 
-			// Aggregate failure categories
 			scheduling.FailureSummary = s.aggregateFailureCategories(unschedulableNodes, scheduling.Events)
 
-			// Extract unique failure categories
 			categorySet := make(map[models.SchedulingFailureCategory]bool)
 			for _, summary := range scheduling.FailureSummary {
 				categorySet[summary.Category] = true
@@ -149,7 +138,6 @@ func (s *podService) GetPodScheduling(ctx context.Context, namespace, name strin
 	return scheduling, nil
 }
 
-// GetPodResources returns aggregated resource requirements for a pod
 func (s *podService) GetPodResources(ctx context.Context, namespace, name string) (*models.PodResources, error) {
 	s.logger.Debug("getting pod resources", "namespace", namespace, "pod", name)
 
@@ -158,10 +146,8 @@ func (s *podService) GetPodResources(ctx context.Context, namespace, name string
 		return nil, err
 	}
 
-	// Collect resources from all containers
 	containers := make([]models.ContainerResources, 0, len(pod.Spec.Containers)+len(pod.Spec.InitContainers))
 
-	// Add regular containers
 	for i := range pod.Spec.Containers {
 		container := &pod.Spec.Containers[i]
 		containers = append(containers, models.ContainerResources{
@@ -171,7 +157,6 @@ func (s *podService) GetPodResources(ctx context.Context, namespace, name string
 		})
 	}
 
-	// Add init containers
 	for i := range pod.Spec.InitContainers {
 		container := &pod.Spec.InitContainers[i]
 		containers = append(containers, models.ContainerResources{
@@ -181,7 +166,6 @@ func (s *podService) GetPodResources(ctx context.Context, namespace, name string
 		})
 	}
 
-	// Calculate total resources
 	totalCPURequest := resource.NewQuantity(0, resource.DecimalSI)
 	totalCPULimit := resource.NewQuantity(0, resource.DecimalSI)
 	totalMemoryRequest := resource.NewQuantity(0, resource.BinarySI)
@@ -252,7 +236,6 @@ func (s *podService) GetPodResources(ctx context.Context, namespace, name string
 	return result, nil
 }
 
-// GetPodDescription returns comprehensive pod information similar to kubectl describe pod
 func (s *podService) GetPodDescription(ctx context.Context, namespace, name string) (*models.PodDescription, error) {
 	s.logger.Debug("getting pod description", "namespace", namespace, "pod", name)
 
@@ -261,18 +244,15 @@ func (s *podService) GetPodDescription(ctx context.Context, namespace, name stri
 		return nil, err
 	}
 
-	// Get events related to this pod
 	events, err := s.getPodEvents(ctx, namespace, name)
 	if err != nil {
 		s.logger.Warn("failed to get pod events",
 			"namespace", namespace,
 			"pod", name,
 			"error", err.Error())
-		// Continue without events rather than failing
 		events = []models.EventInfo{}
 	}
 
-	// Build comprehensive description
 	description := &models.PodDescription{
 		Name:        pod.Name,
 		Namespace:   pod.Namespace,
@@ -298,20 +278,16 @@ func (s *podService) GetPodDescription(ctx context.Context, namespace, name stri
 		Conditions:        pod.Status.Conditions,
 	}
 
-	// Add PodIPs
 	for _, podIP := range pod.Status.PodIPs {
 		description.PodIPs = append(description.PodIPs, podIP.IP)
 	}
 
-	// Process containers
 	description.Containers = s.buildContainerInfo(pod.Spec.Containers, pod.Status.ContainerStatuses)
 
-	// Process init containers
 	if len(pod.Spec.InitContainers) > 0 {
 		description.InitContainers = s.buildContainerInfo(pod.Spec.InitContainers, pod.Status.InitContainerStatuses)
 	}
 
-	// Process volumes
 	description.Volumes = s.buildVolumeInfo(pod.Spec.Volumes)
 
 	s.logger.Debug("successfully built pod description",
@@ -324,9 +300,7 @@ func (s *podService) GetPodDescription(ctx context.Context, namespace, name stri
 	return description, nil
 }
 
-// getPodEvents fetches recent events related to the pod
 func (s *podService) getPodEvents(ctx context.Context, namespace, podName string) ([]models.EventInfo, error) {
-	// Create field selector to get events for this specific pod
 	fieldSelector := fields.AndSelectors(
 		fields.OneTermEqualSelector("involvedObject.kind", "Pod"),
 		fields.OneTermEqualSelector("involvedObject.name", podName),
@@ -335,13 +309,12 @@ func (s *podService) getPodEvents(ctx context.Context, namespace, podName string
 
 	eventList, err := s.k8sClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: fieldSelector,
-		Limit:         20, // Limit to most recent 20 events
+		Limit:         20,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events for pod %s/%s: %w", namespace, podName, err)
 	}
 
-	// Sort events by timestamp (most recent first)
 	sort.Slice(eventList.Items, func(i, j int) bool {
 		return eventList.Items[i].LastTimestamp.After(eventList.Items[j].LastTimestamp.Time)
 	})
@@ -363,11 +336,9 @@ func (s *podService) getPodEvents(ctx context.Context, namespace, podName string
 	return events, nil
 }
 
-// buildContainerInfo creates ContainerInfo from container specs and statuses
 func (s *podService) buildContainerInfo(containers []v1.Container, statuses []v1.ContainerStatus) []models.ContainerInfo {
 	containerInfo := make([]models.ContainerInfo, 0, len(containers))
 
-	// Create a map of container statuses for quick lookup
 	statusMap := make(map[string]v1.ContainerStatus)
 	for i := range statuses {
 		statusMap[statuses[i].Name] = statuses[i]
@@ -382,7 +353,6 @@ func (s *podService) buildContainerInfo(containers []v1.Container, statuses []v1
 			Environment: container.Env,
 		}
 
-		// Add volume mounts
 		for _, mount := range container.VolumeMounts {
 			info.Mounts = append(info.Mounts, models.VolumeMountInfo{
 				Name:      mount.Name,
@@ -392,7 +362,6 @@ func (s *podService) buildContainerInfo(containers []v1.Container, statuses []v1
 			})
 		}
 
-		// Add status information if available
 		if status, exists := statusMap[container.Name]; exists {
 			info.ImageID = status.ImageID
 			info.State = status.State
@@ -406,7 +375,6 @@ func (s *podService) buildContainerInfo(containers []v1.Container, statuses []v1
 	return containerInfo
 }
 
-// buildVolumeInfo creates VolumeInfo from volume specs
 func (s *podService) buildVolumeInfo(volumes []v1.Volume) []models.VolumeInfo {
 	volumeInfo := make([]models.VolumeInfo, 0, len(volumes))
 
@@ -423,7 +391,6 @@ func (s *podService) buildVolumeInfo(volumes []v1.Volume) []models.VolumeInfo {
 	return volumeInfo
 }
 
-// Volume type constants
 const (
 	VolumeTypeEmptyDir    = "EmptyDir"
 	VolumeTypeHostPath    = "HostPath"
@@ -437,7 +404,6 @@ const (
 	VolumeTypeUnknown     = "Unknown"
 )
 
-// getVolumeType determines the volume type from VolumeSource
 func (s *podService) getVolumeType(source *v1.VolumeSource) string {
 	switch {
 	case source.EmptyDir != nil:
@@ -463,12 +429,9 @@ func (s *podService) getVolumeType(source *v1.VolumeSource) string {
 	}
 }
 
-// safeAddQuantity safely adds two resource quantities with error handling
 func safeAddQuantity(total *resource.Quantity, add resource.Quantity) error {
 	defer func() {
 		if r := recover(); r != nil {
-			// Recovered from panic, return nil to indicate success
-			// The quantity might be in an inconsistent state but we'll continue
 		}
 	}()
 
@@ -476,11 +439,9 @@ func safeAddQuantity(total *resource.Quantity, add resource.Quantity) error {
 	return nil
 }
 
-// evaluateNodeAffinity checks if the pod's node affinity matches the given node
 func (s *podService) evaluateNodeAffinity(pod *v1.Pod, node *v1.Node) (bool, []string) {
 	reasons := []string{}
 
-	// Check node selector
 	if len(pod.Spec.NodeSelector) > 0 {
 		for key, value := range pod.Spec.NodeSelector {
 			if nodeValue, exists := node.Labels[key]; !exists || nodeValue != value {
@@ -491,9 +452,7 @@ func (s *podService) evaluateNodeAffinity(pod *v1.Pod, node *v1.Node) (bool, []s
 		reasons = append(reasons, "all node selectors matched")
 	}
 
-	// Check node affinity
 	if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
-		// Check required node affinity
 		if pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution != nil {
 			matched := false
 			for _, term := range pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution.NodeSelectorTerms {
@@ -509,7 +468,6 @@ func (s *podService) evaluateNodeAffinity(pod *v1.Pod, node *v1.Node) (bool, []s
 			}
 		}
 
-		// Note preferred node affinity (doesn't block scheduling)
 		if len(pod.Spec.Affinity.NodeAffinity.PreferredDuringSchedulingIgnoredDuringExecution) > 0 {
 			reasons = append(reasons, "has preferred node affinity (soft constraint)")
 		}
@@ -518,7 +476,6 @@ func (s *podService) evaluateNodeAffinity(pod *v1.Pod, node *v1.Node) (bool, []s
 	return true, reasons
 }
 
-// matchNodeSelectorTerm checks if a node matches a NodeSelectorTerm
 func (s *podService) matchNodeSelectorTerm(node *v1.Node, term v1.NodeSelectorTerm) bool {
 	for _, expr := range term.MatchExpressions {
 		if !s.matchNodeSelectorRequirement(node, expr) {
@@ -533,7 +490,6 @@ func (s *podService) matchNodeSelectorTerm(node *v1.Node, term v1.NodeSelectorTe
 	return true
 }
 
-// matchNodeSelectorRequirement checks if a node matches a NodeSelectorRequirement
 func (s *podService) matchNodeSelectorRequirement(node *v1.Node, req v1.NodeSelectorRequirement) bool {
 	nodeValue, exists := node.Labels[req.Key]
 
@@ -563,25 +519,20 @@ func (s *podService) matchNodeSelectorRequirement(node *v1.Node, req v1.NodeSele
 	case v1.NodeSelectorOpDoesNotExist:
 		return !exists
 	case v1.NodeSelectorOpGt, v1.NodeSelectorOpLt:
-		// These operators require numeric comparison
-		// For simplicity, we'll skip these for now
 		return true
 	}
 	return false
 }
 
-// matchNodeFieldSelector checks if a node matches a field selector
 func (s *podService) matchNodeFieldSelector(node *v1.Node, field v1.NodeSelectorRequirement) bool {
 	var fieldValue string
 	switch field.Key {
 	case "metadata.name":
 		fieldValue = node.Name
-	// Add more field cases as needed
 	default:
 		return false
 	}
 
-	// Apply the same operator logic as matchNodeSelectorRequirement
 	switch field.Operator {
 	case v1.NodeSelectorOpIn:
 		for _, value := range field.Values {
@@ -601,7 +552,6 @@ func (s *podService) matchNodeFieldSelector(node *v1.Node, field v1.NodeSelector
 	return false
 }
 
-// evaluateTaintsAndTolerations checks if the pod tolerates the node's taints
 func (s *podService) evaluateTaintsAndTolerations(pod *v1.Pod, node *v1.Node) (bool, []models.TaintInfo, []string) {
 	untoleratedTaints := []models.TaintInfo{}
 	toleratedTaints := []string{}
@@ -627,36 +577,28 @@ func (s *podService) evaluateTaintsAndTolerations(pod *v1.Pod, node *v1.Node) (b
 	return len(untoleratedTaints) == 0, untoleratedTaints, toleratedTaints
 }
 
-// tolerationMatchesTaint checks if a toleration matches a taint
 func (s *podService) tolerationMatchesTaint(toleration v1.Toleration, taint v1.Taint) bool {
-	// Check if keys match
 	if toleration.Key != "" && toleration.Key != taint.Key {
 		return false
 	}
 
-	// Check if effects match
 	if toleration.Effect != "" && toleration.Effect != taint.Effect {
 		return false
 	}
 
-	// Check value based on operator
 	switch toleration.Operator {
 	case v1.TolerationOpEqual, "":
-		// Empty operator means Equal
 		return toleration.Value == taint.Value
 	case v1.TolerationOpExists:
-		// Exists operator matches any value
 		return true
 	}
 
 	return false
 }
 
-// evaluateResourceFit checks if the node has sufficient resources for the pod
-func (s *podService) evaluateResourceFit(pod *v1.Pod, node *v1.Node, nodeMetrics *v1.NodeStatus) (models.ResourceFitDetails, []string) {
+func (s *podService) evaluateResourceFit(pod *v1.Pod, node *v1.Node) (models.ResourceFitDetails, []string) {
 	insufficientResources := []string{}
 
-	// Calculate pod's total resource requests
 	podCPURequest := resource.NewQuantity(0, resource.DecimalSI)
 	podMemoryRequest := resource.NewQuantity(0, resource.BinarySI)
 
@@ -670,17 +612,13 @@ func (s *podService) evaluateResourceFit(pod *v1.Pod, node *v1.Node, nodeMetrics
 		}
 	}
 
-	// Get node allocatable resources
 	nodeCPUAllocatable := node.Status.Allocatable[v1.ResourceCPU]
 	nodeMemoryAllocatable := node.Status.Allocatable[v1.ResourceMemory]
-
-	// TODO: In a real implementation, we would need to calculate the actual used resources
-	// by summing up all pods on the node. For now, we'll just check against allocatable
 
 	details := models.ResourceFitDetails{
 		NodeCapacity:    node.Status.Capacity,
 		NodeAllocatable: node.Status.Allocatable,
-		NodeRequested:   v1.ResourceList{}, // TODO: Calculate actual requested resources
+		NodeRequested:   v1.ResourceList{},
 		PodRequests: v1.ResourceList{
 			v1.ResourceCPU:    *podCPURequest,
 			v1.ResourceMemory: *podMemoryRequest,
@@ -688,7 +626,6 @@ func (s *podService) evaluateResourceFit(pod *v1.Pod, node *v1.Node, nodeMetrics
 		Fits: true,
 	}
 
-	// Check if pod fits
 	if podCPURequest.Cmp(nodeCPUAllocatable) > 0 {
 		details.Fits = false
 		insufficientResources = append(insufficientResources, fmt.Sprintf("insufficient CPU (requested: %s, allocatable: %s)",
@@ -704,7 +641,6 @@ func (s *podService) evaluateResourceFit(pod *v1.Pod, node *v1.Node, nodeMetrics
 	return details, insufficientResources
 }
 
-// evaluatePodAntiAffinity checks if there are pod anti-affinity conflicts on the node
 func (s *podService) evaluatePodAntiAffinity(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, []string) {
 	conflicts := []string{}
 
@@ -712,7 +648,6 @@ func (s *podService) evaluatePodAntiAffinity(ctx context.Context, pod *v1.Pod, n
 		return true, conflicts
 	}
 
-	// Get all pods on the node
 	podList, err := s.k8sClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", node.Name),
 	})
@@ -720,10 +655,9 @@ func (s *podService) evaluatePodAntiAffinity(ctx context.Context, pod *v1.Pod, n
 		s.logger.Warn("failed to list pods on node for anti-affinity check",
 			"node", node.Name,
 			"error", err.Error())
-		return true, conflicts // Don't block scheduling if we can't check
+		return true, conflicts
 	}
 
-	// Check required anti-affinity
 	for _, term := range pod.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
 		for j := range podList.Items {
 			if s.podMatchesAntiAffinityTerm(&podList.Items[j], term) {
@@ -736,17 +670,13 @@ func (s *podService) evaluatePodAntiAffinity(ctx context.Context, pod *v1.Pod, n
 	return len(conflicts) == 0, conflicts
 }
 
-// podMatchesAntiAffinityTerm checks if a pod matches an anti-affinity term
 func (s *podService) podMatchesAntiAffinityTerm(pod *v1.Pod, term v1.PodAffinityTerm) bool {
-	// Check namespace selector
 	if term.NamespaceSelector != nil {
-		// TODO: Implement namespace selector matching
 	}
 
-	// Check if namespaces match
 	namespaceMatch := false
 	if len(term.Namespaces) == 0 {
-		namespaceMatch = true // No namespace restriction
+		namespaceMatch = true
 	} else {
 		for _, ns := range term.Namespaces {
 			if pod.Namespace == ns {
@@ -760,7 +690,6 @@ func (s *podService) podMatchesAntiAffinityTerm(pod *v1.Pod, term v1.PodAffinity
 		return false
 	}
 
-	// Check label selector
 	if term.LabelSelector != nil {
 		selector, err := metav1.LabelSelectorAsSelector(term.LabelSelector)
 		if err != nil {
@@ -772,9 +701,7 @@ func (s *podService) podMatchesAntiAffinityTerm(pod *v1.Pod, term v1.PodAffinity
 	return false
 }
 
-// getSchedulingEvents fetches scheduling-related events for the pod
 func (s *podService) getSchedulingEvents(ctx context.Context, namespace, podName string) ([]models.SchedulingEvent, error) {
-	// Create field selector to get events for this specific pod
 	fieldSelector := fields.AndSelectors(
 		fields.OneTermEqualSelector("involvedObject.kind", "Pod"),
 		fields.OneTermEqualSelector("involvedObject.name", podName),
@@ -783,17 +710,15 @@ func (s *podService) getSchedulingEvents(ctx context.Context, namespace, podName
 
 	eventList, err := s.k8sClient.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
 		FieldSelector: fieldSelector,
-		Limit:         50, // Get more events for scheduling analysis
+		Limit:         50,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get events for pod %s/%s: %w", namespace, podName, err)
 	}
 
-	// Filter for scheduling-related events
 	schedulingEvents := []models.SchedulingEvent{}
 	for i := range eventList.Items {
 		event := &eventList.Items[i]
-		// Include scheduling-related events
 		if event.Reason == "FailedScheduling" || event.Reason == "Scheduled" ||
 			event.Reason == "Preempted" || event.Reason == "NotTriggerScaleUp" ||
 			event.Source.Component == "default-scheduler" {
@@ -807,7 +732,6 @@ func (s *podService) getSchedulingEvents(ctx context.Context, namespace, podName
 		}
 	}
 
-	// Sort by timestamp (most recent first)
 	sort.Slice(schedulingEvents, func(i, j int) bool {
 		return schedulingEvents[i].Timestamp.After(schedulingEvents[j].Timestamp.Time)
 	})
@@ -815,21 +739,18 @@ func (s *podService) getSchedulingEvents(ctx context.Context, namespace, podName
 	return schedulingEvents, nil
 }
 
-// analyzeSchedulingDecision explains why a pod was scheduled on a specific node
 func (s *podService) analyzeSchedulingDecision(pod *v1.Pod, node *v1.Node) *models.SchedulingDecisions {
 	decision := &models.SchedulingDecisions{
 		SelectedNode: node.Name,
 		Reasons:      []string{},
 	}
 
-	// Check node affinity
 	affinityMatched, affinityReasons := s.evaluateNodeAffinity(pod, node)
 	if affinityMatched {
 		decision.Reasons = append(decision.Reasons, affinityReasons...)
 		decision.MatchedAffinity = affinityReasons
 	}
 
-	// Check taints and tolerations
 	taintsOk, _, toleratedTaints := s.evaluateTaintsAndTolerations(pod, node)
 	if taintsOk {
 		if len(toleratedTaints) > 0 {
@@ -840,7 +761,6 @@ func (s *podService) analyzeSchedulingDecision(pod *v1.Pod, node *v1.Node) *mode
 		}
 	}
 
-	// Check node selector
 	if len(pod.Spec.NodeSelector) > 0 {
 		decision.MatchedNodeSelector = make(map[string]string)
 		for key, value := range pod.Spec.NodeSelector {
@@ -853,14 +773,12 @@ func (s *podService) analyzeSchedulingDecision(pod *v1.Pod, node *v1.Node) *mode
 		}
 	}
 
-	// Check resource fit
-	resourcesFit, _ := s.evaluateResourceFit(pod, node, &node.Status)
+	resourcesFit, _ := s.evaluateResourceFit(pod, node)
 	decision.ResourcesFit = resourcesFit
 	if resourcesFit.Fits {
 		decision.Reasons = append(decision.Reasons, "node has sufficient resources")
 	}
 
-	// Add general reason if no specific constraints
 	if len(decision.Reasons) == 0 {
 		decision.Reasons = append(decision.Reasons, "no specific scheduling constraints, selected by scheduler algorithm")
 	}
@@ -868,15 +786,12 @@ func (s *podService) analyzeSchedulingDecision(pod *v1.Pod, node *v1.Node) *mode
 	return decision
 }
 
-// analyzeUnschedulableNodes analyzes why a pod cannot be scheduled on any node
 func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod) ([]models.UnschedulableNode, error) {
-	// Get all nodes
 	nodeList, err := s.k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list nodes: %w", err)
 	}
 
-	// Check if pod has persistent volume claims
 	hasVolumes := s.checkPodVolumes(pod)
 
 	unschedulableNodes := make([]models.UnschedulableNode, 0, len(nodeList.Items))
@@ -888,7 +803,6 @@ func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod)
 			Reasons:  []string{},
 		}
 
-		// Check if node is ready
 		nodeReady := false
 		for _, condition := range node.Status.Conditions {
 			if condition.Type == v1.NodeReady && condition.Status == v1.ConditionTrue {
@@ -900,19 +814,16 @@ func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod)
 			unschedulable.Reasons = append(unschedulable.Reasons, "node is not ready")
 		}
 
-		// Check if node is schedulable
 		if node.Spec.Unschedulable {
 			unschedulable.Reasons = append(unschedulable.Reasons, "node is marked as unschedulable")
 		}
 
-		// Check node affinity
 		affinityMatched, affinityReasons := s.evaluateNodeAffinity(pod, node)
 		if !affinityMatched {
 			unschedulable.Reasons = append(unschedulable.Reasons, affinityReasons...)
 			unschedulable.UnmatchedAffinity = affinityReasons
 		}
 
-		// Check taints and tolerations
 		taintsOk, untoleratedTaints, _ := s.evaluateTaintsAndTolerations(pod, node)
 		if !taintsOk {
 			unschedulable.Reasons = append(unschedulable.Reasons,
@@ -920,7 +831,6 @@ func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod)
 			unschedulable.UntoleratedTaints = untoleratedTaints
 		}
 
-		// Check node selector
 		if len(pod.Spec.NodeSelector) > 0 {
 			unschedulable.UnmatchedSelectors = make(map[string]string)
 			for key, value := range pod.Spec.NodeSelector {
@@ -933,21 +843,18 @@ func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod)
 			}
 		}
 
-		// Check resource fit
-		resourcesFit, insufficientResources := s.evaluateResourceFit(pod, node, &node.Status)
+		resourcesFit, insufficientResources := s.evaluateResourceFit(pod, node)
 		if !resourcesFit.Fits {
 			unschedulable.Reasons = append(unschedulable.Reasons, "insufficient resources")
 			unschedulable.InsufficientResources = insufficientResources
 		}
 
-		// Check pod anti-affinity
 		antiAffinityOk, conflicts := s.evaluatePodAntiAffinity(ctx, pod, node)
 		if !antiAffinityOk {
 			unschedulable.Reasons = append(unschedulable.Reasons, "pod anti-affinity conflict")
 			unschedulable.PodAffinityConflicts = conflicts
 		}
 
-		// Check volume constraints if pod has volumes
 		if hasVolumes {
 			volumeOk, volumeIssues := s.analyzeVolumeConstraints(ctx, pod, node)
 			if !volumeOk {
@@ -955,7 +862,6 @@ func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod)
 			}
 		}
 
-		// Only add nodes that have scheduling issues
 		if len(unschedulable.Reasons) > 0 {
 			unschedulableNodes = append(unschedulableNodes, unschedulable)
 		}
@@ -964,15 +870,12 @@ func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod)
 	return unschedulableNodes, nil
 }
 
-// categorizeSchedulingFailure analyzes failure reasons and maps them to categories
 func (s *podService) categorizeSchedulingFailure(reasons []string, events []models.SchedulingEvent) []models.SchedulingFailureCategory {
 	categories := make(map[models.SchedulingFailureCategory]bool)
 
-	// Analyze direct reasons
 	for _, reason := range reasons {
 		reasonLower := strings.ToLower(reason)
 
-		// Check for resource-related failures
 		if strings.Contains(reasonLower, "insufficient cpu") {
 			categories[models.FailureCategoryResourceCPU] = true
 		}
@@ -983,40 +886,33 @@ func (s *podService) categorizeSchedulingFailure(reasons []string, events []mode
 			categories[models.FailureCategoryResourceStorage] = true
 		}
 
-		// Check for node status
 		if strings.Contains(reasonLower, "node is not ready") || strings.Contains(reasonLower, "node not ready") {
 			categories[models.FailureCategoryNodeNotReady] = true
 		}
 
-		// Check for affinity issues
 		if strings.Contains(reasonLower, "node affinity") || strings.Contains(reasonLower, "node selector") {
 			categories[models.FailureCategoryNodeAffinity] = true
 		}
 
-		// Check for taint issues
 		if strings.Contains(reasonLower, "taint") || strings.Contains(reasonLower, "toleration") {
 			categories[models.FailureCategoryTaints] = true
 		}
 
-		// Check for pod affinity
 		if strings.Contains(reasonLower, "pod affinity") || strings.Contains(reasonLower, "anti-affinity") {
 			categories[models.FailureCategoryPodAffinity] = true
 		}
 	}
 
-	// Analyze events for volume-related issues
 	volumeCategories := s.parseEventsForVolumeIssues(events)
 	for cat := range volumeCategories {
 		categories[cat] = true
 	}
 
-	// Convert map to slice
 	result := make([]models.SchedulingFailureCategory, 0, len(categories))
 	for cat := range categories {
 		result = append(result, cat)
 	}
 
-	// If no specific category found, mark as miscellaneous
 	if len(result) == 0 && len(reasons) > 0 {
 		result = append(result, models.FailureCategoryMiscellaneous)
 	}
@@ -1024,28 +920,24 @@ func (s *podService) categorizeSchedulingFailure(reasons []string, events []mode
 	return result
 }
 
-// parseEventsForVolumeIssues analyzes event messages for volume-related failures
 func (s *podService) parseEventsForVolumeIssues(events []models.SchedulingEvent) map[models.SchedulingFailureCategory]bool {
 	categories := make(map[models.SchedulingFailureCategory]bool)
 
 	for _, event := range events {
 		msgLower := strings.ToLower(event.Message)
 
-		// Check for multi-attach errors
 		if strings.Contains(msgLower, "multi-attach error") ||
 			strings.Contains(msgLower, "volume is already exclusively attached") ||
 			strings.Contains(msgLower, "volume is already used by") {
 			categories[models.FailureCategoryVolumeMultiAttach] = true
 		}
 
-		// Check for volume node affinity conflicts
 		if strings.Contains(msgLower, "volume node affinity conflict") ||
 			strings.Contains(msgLower, "nodeaffinity") ||
 			(strings.Contains(msgLower, "volume") && strings.Contains(msgLower, "node affinity")) {
 			categories[models.FailureCategoryVolumeNodeAffinity] = true
 		}
 
-		// Check for general volume attachment issues
 		if strings.Contains(msgLower, "failedattachvolume") ||
 			strings.Contains(msgLower, "failed to attach volume") ||
 			strings.Contains(msgLower, "unable to attach") ||
@@ -1053,9 +945,7 @@ func (s *podService) parseEventsForVolumeIssues(events []models.SchedulingEvent)
 			categories[models.FailureCategoryVolumeAttachment] = true
 		}
 
-		// Check for volume-related scheduling failures
 		if event.Reason == "FailedScheduling" && strings.Contains(msgLower, "volume") {
-			// If it's not already categorized more specifically
 			if len(categories) == 0 {
 				categories[models.FailureCategoryVolumeAttachment] = true
 			}
@@ -1065,12 +955,9 @@ func (s *podService) parseEventsForVolumeIssues(events []models.SchedulingEvent)
 	return categories
 }
 
-// aggregateFailureCategories summarizes failure categories across all nodes
 func (s *podService) aggregateFailureCategories(unschedulableNodes []models.UnschedulableNode, events []models.SchedulingEvent) []models.FailureCategorySummary {
-	// Map to track categories and their associated nodes
 	categoryMap := make(map[models.SchedulingFailureCategory]*models.FailureCategorySummary)
 
-	// Process each unschedulable node
 	for _, node := range unschedulableNodes {
 		nodeCategories := s.categorizeSchedulingFailure(node.Reasons, events)
 
@@ -1089,13 +976,11 @@ func (s *podService) aggregateFailureCategories(unschedulableNodes []models.Unsc
 		}
 	}
 
-	// Convert map to sorted slice
 	summaries := make([]models.FailureCategorySummary, 0, len(categoryMap))
 	for _, summary := range categoryMap {
 		summaries = append(summaries, *summary)
 	}
 
-	// Sort by count (descending)
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].Count > summaries[j].Count
 	})
@@ -1103,7 +988,6 @@ func (s *podService) aggregateFailureCategories(unschedulableNodes []models.Unsc
 	return summaries
 }
 
-// getCategoryDescription returns a human-readable description for a failure category
 func getCategoryDescription(category models.SchedulingFailureCategory) string {
 	descriptions := map[models.SchedulingFailureCategory]string{
 		models.FailureCategoryResourceCPU:        "Insufficient CPU resources available on nodes",
@@ -1125,7 +1009,6 @@ func getCategoryDescription(category models.SchedulingFailureCategory) string {
 	return "Unknown scheduling failure"
 }
 
-// checkPodVolumes checks if the pod has persistent volume claims
 func (s *podService) checkPodVolumes(pod *v1.Pod) bool {
 	for _, volume := range pod.Spec.Volumes {
 		if volume.PersistentVolumeClaim != nil {
@@ -1135,17 +1018,14 @@ func (s *podService) checkPodVolumes(pod *v1.Pod) bool {
 	return false
 }
 
-// analyzeVolumeConstraints checks for volume-related scheduling constraints
 func (s *podService) analyzeVolumeConstraints(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, []string) {
 	volumeIssues := []string{}
 
-	// Check each volume in the pod
 	for _, volume := range pod.Spec.Volumes {
 		if volume.PersistentVolumeClaim == nil {
 			continue
 		}
 
-		// Get the PVC
 		pvc, err := s.k8sClient.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(
 			ctx, volume.PersistentVolumeClaim.ClaimName, metav1.GetOptions{})
 		if err != nil {
@@ -1156,14 +1036,12 @@ func (s *podService) analyzeVolumeConstraints(ctx context.Context, pod *v1.Pod, 
 			continue
 		}
 
-		// Check if PVC is bound
 		if pvc.Status.Phase != v1.ClaimBound {
 			volumeIssues = append(volumeIssues, fmt.Sprintf("PVC %s is not bound (status: %s)",
 				pvc.Name, pvc.Status.Phase))
 			continue
 		}
 
-		// Get the PV
 		if pvc.Spec.VolumeName != "" {
 			pv, err := s.k8sClient.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
 			if err != nil {
@@ -1173,9 +1051,7 @@ func (s *podService) analyzeVolumeConstraints(ctx context.Context, pod *v1.Pod, 
 				continue
 			}
 
-			// Check for node affinity on the PV
 			if pv.Spec.NodeAffinity != nil && pv.Spec.NodeAffinity.Required != nil {
-				// Simple check if this node matches the PV's node affinity
 				matches := false
 				for _, term := range pv.Spec.NodeAffinity.Required.NodeSelectorTerms {
 					if s.matchNodeSelectorTerm(node, term) {
@@ -1189,12 +1065,9 @@ func (s *podService) analyzeVolumeConstraints(ctx context.Context, pod *v1.Pod, 
 				}
 			}
 
-			// Check access modes compatibility
 			if len(pvc.Status.AccessModes) > 0 {
 				for _, mode := range pvc.Status.AccessModes {
 					if mode == v1.ReadWriteOnce {
-						// Check if volume is already attached to another node
-						// This is a simplified check - in reality, we'd need to check VolumeAttachment objects
 						volumeIssues = append(volumeIssues,
 							fmt.Sprintf("PVC %s has ReadWriteOnce access mode (potential multi-attach issue)", pvc.Name))
 					}
@@ -1206,31 +1079,25 @@ func (s *podService) analyzeVolumeConstraints(ctx context.Context, pod *v1.Pod, 
 	return len(volumeIssues) == 0, volumeIssues
 }
 
-// GetPodFailureEvents returns analyzed failure events for a pod
 func (s *podService) GetPodFailureEvents(ctx context.Context, namespace, name string) (*models.PodFailureEvents, error) {
 	s.logger.Debug("getting pod failure events", "namespace", namespace, "pod", name)
 
-	// Get the pod to check if it exists and get its status
 	pod, err := s.GetPod(ctx, namespace, name)
 	if err != nil {
 		return nil, err
 	}
 
-	// Get all events for this pod
 	events, err := s.getPodEvents(ctx, namespace, name)
 	if err != nil {
 		s.logger.Warn("failed to get pod events for failure analysis",
 			"namespace", namespace,
 			"pod", name,
 			"error", err.Error())
-		// Continue with empty events rather than failing
 		events = []models.EventInfo{}
 	}
 
-	// Analyze failure events
 	failureEvents := s.analyzeFailureEvents(events, pod)
 
-	// Build failure events response
 	result := &models.PodFailureEvents{
 		PodName:         name,
 		Namespace:       namespace,
@@ -1241,7 +1108,6 @@ func (s *podService) GetPodFailureEvents(ctx context.Context, namespace, name st
 		PodStatus:       pod.Status.Reason,
 	}
 
-	// Count events by category and severity
 	for i := range failureEvents {
 		event := &failureEvents[i]
 		result.EventCategories[event.Category]++
@@ -1253,13 +1119,11 @@ func (s *podService) GetPodFailureEvents(ctx context.Context, namespace, name st
 			result.WarningEvents++
 		}
 
-		// Track most recent issue
 		if result.MostRecentIssue == nil || event.LastTimestamp.After(result.MostRecentIssue.LastTimestamp.Time) {
 			result.MostRecentIssue = event
 		}
 	}
 
-	// Identify ongoing issues (events that occurred in the last 5 minutes)
 	result.OngoingIssues = s.identifyOngoingIssues(failureEvents)
 
 	s.logger.Debug("successfully analyzed pod failure events",
@@ -1273,12 +1137,10 @@ func (s *podService) GetPodFailureEvents(ctx context.Context, namespace, name st
 	return result, nil
 }
 
-// analyzeFailureEvents analyzes events to identify and categorize failures
 func (s *podService) analyzeFailureEvents(events []models.EventInfo, pod *v1.Pod) []models.FailureEvent {
 	failureEvents := []models.FailureEvent{}
 	now := time.Now()
 
-	// Define failure patterns to look for
 	failurePatterns := map[string]struct {
 		category        models.FailureEventCategory
 		severity        string
@@ -1353,14 +1215,11 @@ func (s *podService) analyzeFailureEvents(events []models.EventInfo, pod *v1.Pod
 		},
 	}
 
-	// Analyze each event
 	for _, event := range events {
-		// Skip normal events unless they have high frequency
 		if event.Type == "Normal" && event.Count < 5 {
 			continue
 		}
 
-		// Check if this matches any failure pattern
 		var failureEvent *models.FailureEvent
 		for pattern, config := range failurePatterns {
 			if strings.Contains(event.Reason, pattern) {
@@ -1375,7 +1234,6 @@ func (s *podService) analyzeFailureEvents(events []models.EventInfo, pod *v1.Pod
 			}
 		}
 
-		// If no specific pattern matched but it's a Warning event, categorize as Other
 		if failureEvent == nil && event.Type == "Warning" {
 			failureEvent = &models.FailureEvent{
 				EventInfo:       event,
@@ -1386,12 +1244,10 @@ func (s *podService) analyzeFailureEvents(events []models.EventInfo, pod *v1.Pod
 			}
 		}
 
-		// Skip if not a failure event
 		if failureEvent == nil {
 			continue
 		}
 
-		// Calculate recurrence information
 		if event.Count > 3 {
 			failureEvent.IsRecurring = true
 			duration := event.LastTimestamp.Sub(event.FirstTimestamp.Time)
@@ -1405,37 +1261,29 @@ func (s *podService) analyzeFailureEvents(events []models.EventInfo, pod *v1.Pod
 			}
 		}
 
-		// Calculate time since first occurrence
 		timeSinceFirst := now.Sub(event.FirstTimestamp.Time)
 		if timeSinceFirst > 0 {
 			failureEvent.TimeSinceFirst = s.formatDuration(timeSinceFirst)
 		}
 
-		// Enhance with pod-specific context
 		s.enhanceFailureEventContext(failureEvent, pod)
 
 		failureEvents = append(failureEvents, *failureEvent)
 	}
 
-	// Sort by severity and recency
 	sort.Slice(failureEvents, func(i, j int) bool {
-		// First by severity
 		if failureEvents[i].Severity != failureEvents[j].Severity {
 			return s.severityWeight(failureEvents[i].Severity) > s.severityWeight(failureEvents[j].Severity)
 		}
-		// Then by most recent
 		return failureEvents[i].LastTimestamp.After(failureEvents[j].LastTimestamp.Time)
 	})
 
 	return failureEvents
 }
 
-// enhanceFailureEventContext adds pod-specific context to failure events
 func (s *podService) enhanceFailureEventContext(event *models.FailureEvent, pod *v1.Pod) {
-	// Add context based on event category
 	switch event.Category {
 	case models.FailureEventCategoryCrash:
-		// Check container statuses for additional context
 		for _, status := range pod.Status.ContainerStatuses {
 			if status.State.Terminated != nil && status.State.Terminated.ExitCode != 0 {
 				event.PossibleCauses = append(event.PossibleCauses,
@@ -1447,7 +1295,6 @@ func (s *podService) enhanceFailureEventContext(event *models.FailureEvent, pod 
 			}
 		}
 	case models.FailureEventCategoryResource:
-		// Add resource request/limit information
 		if pod.Status.QOSClass == v1.PodQOSBurstable || pod.Status.QOSClass == v1.PodQOSBestEffort {
 			event.PossibleCauses = append(event.PossibleCauses,
 				fmt.Sprintf("Pod QoS class is %s - consider setting guaranteed QoS", pod.Status.QOSClass))
@@ -1455,7 +1302,6 @@ func (s *podService) enhanceFailureEventContext(event *models.FailureEvent, pod 
 	}
 }
 
-// identifyOngoingIssues identifies issues that are still occurring
 func (s *podService) identifyOngoingIssues(events []models.FailureEvent) []string {
 	ongoing := []string{}
 	threshold := time.Now().Add(-5 * time.Minute)
@@ -1473,7 +1319,6 @@ func (s *podService) identifyOngoingIssues(events []models.FailureEvent) []strin
 	return ongoing
 }
 
-// formatDuration formats a duration into a human-readable string
 func (s *podService) formatDuration(d time.Duration) string {
 	if d < time.Minute {
 		return fmt.Sprintf("%ds", int(d.Seconds()))
@@ -1497,7 +1342,6 @@ func (s *podService) formatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dd", days)
 }
 
-// severityWeight returns a weight for sorting by severity
 func (s *podService) severityWeight(severity string) int {
 	switch severity {
 	case "critical":

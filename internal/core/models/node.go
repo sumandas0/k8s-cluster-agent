@@ -4,7 +4,6 @@ import (
 	"time"
 )
 
-// NodeUtilization contains current resource utilization for a node
 type NodeUtilization struct {
 	NodeName         string    `json:"nodeName"`
 	CPUUsage         string    `json:"cpuUsage"`

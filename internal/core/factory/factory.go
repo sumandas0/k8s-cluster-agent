@@ -9,7 +9,6 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/kubernetes"
 )
 
-// NewServices creates all service instances with their dependencies
 func NewServices(clients *kubernetes.Clients, cfg *config.Config, logger *slog.Logger) *core.Services {
 	return &core.Services{
 		Pod:       services.NewPodService(clients.Kubernetes, logger),

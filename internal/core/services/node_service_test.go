@@ -14,7 +14,6 @@ import (
 )
 
 func TestNodeService_GetNodeUtilization_NoMetrics(t *testing.T) {
-	// Create test node
 	testNode := &v1.Node{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-node",
@@ -27,19 +26,15 @@ func TestNodeService_GetNodeUtilization_NoMetrics(t *testing.T) {
 		},
 	}
 
-	// Create fake client with test node
 	fakeClient := fake.NewSimpleClientset(testNode)
 
-	// Create service without metrics client
 	svc := NewNodeService(fakeClient, nil, slog.Default())
 
-	// Test should return ErrMetricsNotAvailable
 	_, err := svc.GetNodeUtilization(context.Background(), "test-node")
 	if err != core.ErrMetricsNotAvailable {
 		t.Errorf("expected ErrMetricsNotAvailable, got %v", err)
 	}
 
-	// Test node not found
 	_, err = svc.GetNodeUtilization(context.Background(), "non-existent")
 	if err != core.ErrNodeNotFound {
 		t.Errorf("expected ErrNodeNotFound, got %v", err)
