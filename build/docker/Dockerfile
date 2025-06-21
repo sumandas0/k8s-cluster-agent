@@ -26,7 +26,7 @@ FROM alpine:3.19
 RUN apk --no-cache add ca-certificates
 
 # Create non-root user
-RUN adduser -D -u 65534 -g agent agent
+RUN adduser -D -u 1001 -g agent agent
 
 # Set working directory
 WORKDIR /app
@@ -38,7 +38,7 @@ COPY --from=builder /build/k8s-cluster-agent .
 RUN chown -R agent:agent /app
 
 # Switch to non-root user
-USER 65534
+USER 1001
 
 # Expose port
 EXPOSE 8080
