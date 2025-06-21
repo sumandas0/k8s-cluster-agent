@@ -27,20 +27,24 @@ type Config struct {
 
 	// Feature flags
 	EnableMetrics bool `env:"ENABLE_METRICS" default:"true"`
+
+	// Analysis thresholds
+	PodRestartThreshold int `env:"POD_RESTART_THRESHOLD" default:"5"`
 }
 
 // Load reads configuration from environment variables
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:            getEnvAsInt("PORT", 8080),
-		ReadTimeout:     getEnvAsDuration("READ_TIMEOUT", 10*time.Second),
-		WriteTimeout:    getEnvAsDuration("WRITE_TIMEOUT", 10*time.Second),
-		ShutdownTimeout: getEnvAsDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
-		LogLevel:        getEnv("LOG_LEVEL", "info"),
-		LogFormat:       getEnv("LOG_FORMAT", "json"),
-		K8sTimeout:      getEnvAsDuration("K8S_TIMEOUT", 30*time.Second),
-		NodeName:        getEnv("NODE_NAME", ""),
-		EnableMetrics:   getEnvAsBool("ENABLE_METRICS", true),
+		Port:                getEnvAsInt("PORT", 8080),
+		ReadTimeout:         getEnvAsDuration("READ_TIMEOUT", 10*time.Second),
+		WriteTimeout:        getEnvAsDuration("WRITE_TIMEOUT", 10*time.Second),
+		ShutdownTimeout:     getEnvAsDuration("SHUTDOWN_TIMEOUT", 10*time.Second),
+		LogLevel:            getEnv("LOG_LEVEL", "info"),
+		LogFormat:           getEnv("LOG_FORMAT", "json"),
+		K8sTimeout:          getEnvAsDuration("K8S_TIMEOUT", 30*time.Second),
+		NodeName:            getEnv("NODE_NAME", ""),
+		EnableMetrics:       getEnvAsBool("ENABLE_METRICS", true),
+		PodRestartThreshold: getEnvAsInt("POD_RESTART_THRESHOLD", 5),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -63,6 +67,10 @@ func (c *Config) Validate() error {
 
 	if c.LogFormat != "json" && c.LogFormat != "text" {
 		return fmt.Errorf("invalid log format: %s", c.LogFormat)
+	}
+
+	if c.PodRestartThreshold < 0 {
+		return fmt.Errorf("invalid pod restart threshold: %d (must be >= 0)", c.PodRestartThreshold)
 	}
 
 	return nil

@@ -2,15 +2,22 @@ package services
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes/fake"
 
 	"github.com/sumandas0/k8s-cluster-agent/internal/core"
+	"github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 )
 
 func TestPodService_GetPod(t *testing.T) {
@@ -318,4 +325,259 @@ func TestPodService_GetPodDescription(t *testing.T) {
 	if err != core.ErrPodNotFound {
 		t.Errorf("expected ErrPodNotFound, got %v", err)
 	}
+}
+
+func TestGetPodFailureEvents(t *testing.T) {
+	// Helper function to create test events
+	createTestEvent := func(reason, message, eventType string, count int32, firstTime, lastTime time.Time) v1.Event {
+		return v1.Event{
+			TypeMeta: metav1.TypeMeta{
+				Kind:       "Event",
+				APIVersion: "v1",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("test-event-%s", reason),
+				Namespace: "test-namespace",
+			},
+			InvolvedObject: v1.ObjectReference{
+				Kind:      "Pod",
+				Name:      "test-pod",
+				Namespace: "test-namespace",
+			},
+			Reason:         reason,
+			Message:        message,
+			Type:           eventType,
+			Count:          count,
+			FirstTimestamp: metav1.Time{Time: firstTime},
+			LastTimestamp:  metav1.Time{Time: lastTime},
+			Source: v1.EventSource{
+				Component: "kubelet",
+				Host:      "test-node",
+			},
+		}
+	}
+
+	// Create test times
+	now := time.Now()
+	oneHourAgo := now.Add(-1 * time.Hour)
+	twoHoursAgo := now.Add(-2 * time.Hour)
+	fiveMinutesAgo := now.Add(-5 * time.Minute)
+
+	tests := []struct {
+		name          string
+		namespace     string
+		podName       string
+		pod           *v1.Pod
+		events        *v1.EventList
+		expectedError error
+		validateFunc  func(t *testing.T, result *models.PodFailureEvents)
+	}{
+		{
+			name:      "successful with critical failure events",
+			namespace: "test-namespace",
+			podName:   "test-pod",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "test-namespace",
+				},
+				Status: v1.PodStatus{
+					Phase: v1.PodPending,
+					ContainerStatuses: []v1.ContainerStatus{
+						{
+							Name:         "test-container",
+							RestartCount: 5,
+							State: v1.ContainerState{
+								Waiting: &v1.ContainerStateWaiting{
+									Reason:  "CrashLoopBackOff",
+									Message: "Back-off restarting failed container",
+								},
+							},
+						},
+					},
+				},
+			},
+			events: &v1.EventList{
+				Items: []v1.Event{
+					createTestEvent("CrashLoopBackOff", "Back-off restarting failed container", "Warning", 10, twoHoursAgo, fiveMinutesAgo),
+					createTestEvent("FailedScheduling", "0/3 nodes are available: insufficient memory", "Warning", 15, oneHourAgo, now),
+					createTestEvent("Pulled", "Successfully pulled image", "Normal", 1, oneHourAgo, oneHourAgo),
+				},
+			},
+			validateFunc: func(t *testing.T, result *models.PodFailureEvents) {
+				assert.Equal(t, "test-pod", result.PodName)
+				assert.Equal(t, "test-namespace", result.Namespace)
+				assert.Equal(t, 3, result.TotalEvents)
+				assert.Equal(t, 2, len(result.FailureEvents)) // Only failure events
+				assert.Equal(t, 2, result.CriticalEvents)
+				assert.Equal(t, 0, result.WarningEvents)
+				assert.NotNil(t, result.MostRecentIssue)
+				assert.Equal(t, "FailedScheduling", result.MostRecentIssue.Reason)
+
+				// Check categories
+				assert.Equal(t, 2, len(result.EventCategories))
+				assert.Equal(t, 1, result.EventCategories[models.FailureEventCategoryCrash])
+				assert.Equal(t, 1, result.EventCategories[models.FailureEventCategoryScheduling])
+
+				// Check ongoing issues
+				assert.Greater(t, len(result.OngoingIssues), 0)
+			},
+		},
+		{
+			name:      "pod with image pull failures",
+			namespace: "test-namespace",
+			podName:   "test-pod",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "test-namespace",
+				},
+				Status: v1.PodStatus{
+					Phase: v1.PodPending,
+				},
+			},
+			events: &v1.EventList{
+				Items: []v1.Event{
+					createTestEvent("ImagePullBackOff", "Back-off pulling image \"invalid:latest\"", "Warning", 20, twoHoursAgo, fiveMinutesAgo),
+					createTestEvent("ErrImagePull", "Failed to pull image \"invalid:latest\": rpc error", "Warning", 5, oneHourAgo, oneHourAgo),
+				},
+			},
+			validateFunc: func(t *testing.T, result *models.PodFailureEvents) {
+				assert.Equal(t, 2, len(result.FailureEvents))
+				assert.Equal(t, 2, result.CriticalEvents)
+
+				// Check categories
+				assert.Equal(t, 1, len(result.EventCategories))
+				assert.Equal(t, 2, result.EventCategories[models.FailureEventCategoryImagePull])
+
+				// Check recurrence info
+				imagePullEvent := result.FailureEvents[0]
+				assert.True(t, imagePullEvent.IsRecurring)
+				assert.NotEmpty(t, imagePullEvent.RecurrenceRate)
+				assert.NotEmpty(t, imagePullEvent.TimeSinceFirst)
+			},
+		},
+		{
+			name:      "pod with no failure events",
+			namespace: "test-namespace",
+			podName:   "test-pod",
+			pod: &v1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-pod",
+					Namespace: "test-namespace",
+				},
+				Status: v1.PodStatus{
+					Phase: v1.PodRunning,
+				},
+			},
+			events: &v1.EventList{
+				Items: []v1.Event{
+					createTestEvent("Pulled", "Successfully pulled image", "Normal", 1, oneHourAgo, oneHourAgo),
+					createTestEvent("Created", "Created container", "Normal", 1, oneHourAgo, oneHourAgo),
+					createTestEvent("Started", "Started container", "Normal", 1, oneHourAgo, oneHourAgo),
+				},
+			},
+			validateFunc: func(t *testing.T, result *models.PodFailureEvents) {
+				assert.Equal(t, 3, result.TotalEvents)
+				assert.Equal(t, 0, len(result.FailureEvents))
+				assert.Equal(t, 0, result.CriticalEvents)
+				assert.Equal(t, 0, result.WarningEvents)
+				assert.Nil(t, result.MostRecentIssue)
+				assert.Empty(t, result.EventCategories)
+			},
+		},
+		{
+			name:          "pod not found",
+			namespace:     "test-namespace",
+			podName:       "non-existent-pod",
+			pod:           nil,
+			events:        nil,
+			expectedError: core.ErrPodNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create fake clientset
+			var objects []runtime.Object
+			if tt.pod != nil {
+				objects = append(objects, tt.pod)
+			}
+			if tt.events != nil {
+				for i := range tt.events.Items {
+					objects = append(objects, &tt.events.Items[i])
+				}
+			}
+			fakeClient := fake.NewSimpleClientset(objects...)
+
+			// Create logger
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+
+			// Create service
+			svc := NewPodService(fakeClient, logger)
+
+			// Call method
+			result, err := svc.GetPodFailureEvents(context.Background(), tt.namespace, tt.podName)
+
+			// Validate error
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.True(t, errors.Is(err, tt.expectedError))
+				assert.Nil(t, result)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, result)
+				if tt.validateFunc != nil {
+					tt.validateFunc(t, result)
+				}
+			}
+		})
+	}
+}
+
+func TestAnalyzeFailureEvents(t *testing.T) {
+	svc := &podService{
+		logger: slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
+
+	now := time.Now()
+
+	events := []models.EventInfo{
+		{
+			Type:           "Warning",
+			Reason:         "OOMKilled",
+			Message:        "Container was OOMKilled",
+			FirstTimestamp: metav1.Time{Time: now.Add(-30 * time.Minute)},
+			LastTimestamp:  metav1.Time{Time: now.Add(-5 * time.Minute)},
+			Count:          5,
+		},
+		{
+			Type:           "Normal",
+			Reason:         "BackOff",
+			Message:        "Back-off restarting container",
+			FirstTimestamp: metav1.Time{Time: now.Add(-1 * time.Hour)},
+			LastTimestamp:  metav1.Time{Time: now.Add(-10 * time.Minute)},
+			Count:          10, // High count makes it a failure event
+		},
+	}
+
+	pod := &v1.Pod{
+		Status: v1.PodStatus{
+			QOSClass: v1.PodQOSBurstable,
+		},
+	}
+
+	results := svc.analyzeFailureEvents(events, pod)
+
+	assert.Equal(t, 2, len(results))
+
+	// OOMKilled should be first (critical severity)
+	assert.Equal(t, "OOMKilled", results[0].Reason)
+	assert.Equal(t, models.FailureEventCategoryResource, results[0].Category)
+	assert.Equal(t, "critical", results[0].Severity)
+	assert.True(t, results[0].IsRecurring)
+
+	// BackOff should be second
+	assert.Equal(t, "BackOff", results[1].Reason)
+	assert.Equal(t, models.FailureEventCategoryCrash, results[1].Category)
 }

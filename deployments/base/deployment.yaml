@@ -47,6 +47,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: spec.nodeName
+        - name: POD_RESTART_THRESHOLD
+          value: "5"
         resources:
           requests:
             cpu: 50m

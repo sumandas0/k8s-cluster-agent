@@ -6,6 +6,8 @@ A lightweight in-cluster Kubernetes agent that provides read-only access to pod 
 
 - **Pod Information**: Get detailed pod information including scheduling details and resource requirements
 - **Enhanced Scheduling Analysis**: Comprehensive scheduling failure analysis for pending pods with per-node breakdown
+- **Failure Event Analysis**: Intelligent analysis of pod failure events with categorization and actionable insights
+- **Namespace Error Analysis**: Analyze all pods in a namespace for common issues (restarts, pending, crashes)
 - **Node Utilization**: Retrieve real-time node resource utilization metrics
 - **Secure by Default**: Minimal RBAC permissions, read-only access
 - **High Performance**: 500ms request timeout, efficient resource usage
@@ -336,6 +338,207 @@ curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/de
 }
 ```
 
+#### Get Pod Failure Events
+```http
+GET /api/v1/pods/{namespace}/{podName}/failure-events
+```
+
+Returns analyzed failure events for a pod, categorizing issues and providing actionable insights.
+
+**Example:**
+```bash
+curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/default/my-pod/failure-events
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "podName": "my-pod",
+    "namespace": "default",
+    "totalEvents": 15,
+    "failureEvents": [
+      {
+        "type": "Warning",
+        "reason": "CrashLoopBackOff",
+        "message": "Back-off restarting failed container",
+        "firstTimestamp": "2023-06-21T09:00:00Z",
+        "lastTimestamp": "2023-06-21T10:25:00Z",
+        "count": 10,
+        "source": "kubelet/node-1",
+        "category": "ContainerCrash",
+        "severity": "critical",
+        "isRecurring": true,
+        "recurrenceRate": "6.0 times per hour",
+        "timeSinceFirst": "1h25m",
+        "possibleCauses": [
+          "Application crash",
+          "Missing dependencies",
+          "Configuration error",
+          "Container app exited with code 1",
+          "Container app has restarted 10 times"
+        ],
+        "suggestedAction": "Examine container logs and fix application startup issues"
+      },
+      {
+        "type": "Warning",
+        "reason": "FailedScheduling",
+        "message": "0/4 nodes are available: 3 insufficient memory, 1 node(s) had volume affinity conflict",
+        "firstTimestamp": "2023-06-21T08:00:00Z",
+        "lastTimestamp": "2023-06-21T08:30:00Z",
+        "count": 5,
+        "source": "default-scheduler",
+        "category": "Scheduling",
+        "severity": "critical",
+        "isRecurring": true,
+        "recurrenceRate": "10.0 times per hour",
+        "timeSinceFirst": "2h25m",
+        "possibleCauses": [
+          "Insufficient resources",
+          "Node selector mismatch",
+          "Affinity rules",
+          "Taints not tolerated"
+        ],
+        "suggestedAction": "Check node resources and scheduling constraints"
+      }
+    ],
+    "eventCategories": {
+      "ContainerCrash": 1,
+      "Scheduling": 1
+    },
+    "criticalEvents": 2,
+    "warningEvents": 0,
+    "mostRecentIssue": {
+      "reason": "CrashLoopBackOff",
+      "message": "Back-off restarting failed container",
+      "lastTimestamp": "2023-06-21T10:25:00Z"
+    },
+    "ongoingIssues": [
+      "CrashLoopBackOff: Back-off restarting failed container"
+    ],
+    "podPhase": "Running",
+    "podStatus": "CrashLoopBackOff"
+  },
+  "metadata": {
+    "requestId": "123e4567-e89b-12d3-a456-426614174000",
+    "timestamp": "2023-06-21T10:30:00Z"
+  }
+}
+```
+
+**Event Categories:**
+- `Scheduling`: Pod scheduling failures
+- `ImagePull`: Image pull errors (ImagePullBackOff, ErrImagePull)
+- `ContainerCrash`: Container crashes and restarts (CrashLoopBackOff, BackOff)
+- `Volume`: Volume attachment and mounting issues
+- `Resource`: Resource limits exceeded (OOMKilled, Evicted)
+- `Probe`: Liveness/readiness probe failures
+- `Network`: Network connectivity issues
+- `Other`: Uncategorized failures
+
+**Features:**
+- **Intelligent Filtering**: Identifies problematic events (errors, warnings, high-frequency events)
+- **Severity Classification**: Categorizes events as critical, warning, or info
+- **Recurrence Analysis**: Tracks event frequency and calculates recurrence rates
+- **Actionable Insights**: Provides possible causes and suggested actions for each failure type
+- **Ongoing Issues**: Highlights problems that occurred in the last 5 minutes
+
+#### Get Namespace Error Analysis
+```http
+GET /api/v1/namespace/{namespace}/error
+```
+
+Analyzes all pods in a namespace for common issues, filtering to only Deployments and StatefulSets (excludes Jobs).
+
+**Example:**
+```bash
+curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/namespace/default/error
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "namespace": "default",
+    "analysisTime": "2023-06-21T10:30:00Z",
+    "totalPodsAnalyzed": 10,
+    "problematicPodsCount": 3,
+    "healthyPodsCount": 7,
+    "restartThresholdUsed": 5,
+    "summary": [
+      {
+        "issueType": "CrashLoopBackOff",
+        "count": 2,
+        "description": "Pods in crash loop backoff",
+        "affectedPods": ["app-1-xyz", "app-2-abc"]
+      },
+      {
+        "issueType": "HighRestarts",
+        "count": 1,
+        "description": "Pods with excessive restart counts",
+        "affectedPods": ["worker-3-def"]
+      }
+    ],
+    "problematicPods": [
+      {
+        "name": "app-1-xyz",
+        "namespace": "default",
+        "ownerKind": "Deployment",
+        "ownerName": "app-1",
+        "phase": "Running",
+        "restartCount": 15,
+        "age": "2h30m",
+        "issues": [
+          {
+            "type": "HighRestarts",
+            "description": "Pod has restarted 15 times (threshold: 5)",
+            "severity": "critical",
+            "details": "main: 15 restarts"
+          },
+          {
+            "type": "CrashLoopBackOff",
+            "description": "Container main is in CrashLoopBackOff state",
+            "severity": "critical",
+            "details": "Back-off restarting failed container"
+          }
+        ],
+        "recentEvents": [
+          {
+            "type": "Warning",
+            "reason": "BackOff",
+            "message": "Back-off restarting failed container",
+            "lastTimestamp": "2023-06-21T10:25:00Z",
+            "count": 50
+          }
+        ]
+      }
+    ],
+    "criticalIssuesCount": 5,
+    "warningIssuesCount": 1
+  },
+  "metadata": {
+    "requestId": "123e4567-e89b-12d3-a456-426614174000",
+    "timestamp": "2023-06-21T10:30:00Z"
+  }
+}
+```
+
+**Issue Types Detected:**
+- `HighRestarts`: Pods with restart count above threshold (configurable via POD_RESTART_THRESHOLD)
+- `Pending`: Pods stuck in pending state for more than 5 minutes
+- `Failed`: Pods in failed state
+- `CrashLoopBackOff`: Containers repeatedly crashing
+- `ImagePullError`: Image pull failures (ImagePullBackOff, ErrImagePull)
+- `ResourceConstraints`: Insufficient resources for scheduling
+- `Unschedulable`: Pods that cannot be scheduled
+
+**Features:**
+- **Configurable Thresholds**: Restart threshold configurable via environment variable
+- **Owner Filtering**: Only analyzes pods owned by Deployments and StatefulSets
+- **Issue Aggregation**: Groups issues by type with affected pod lists
+- **Recent Events**: Includes recent warning events for problematic pods
+- **Actionable Insights**: Provides specific details about each issue
+
 #### Get Node Utilization
 ```http
 GET /api/v1/nodes/{nodeName}/utilization
@@ -485,6 +688,7 @@ The agent is configured through environment variables:
 | `K8S_TIMEOUT` | `30s` | Kubernetes API timeout |
 | `READ_TIMEOUT` | `10s` | HTTP server read timeout |
 | `WRITE_TIMEOUT` | `10s` | HTTP server write timeout |
+| `POD_RESTART_THRESHOLD` | `5` | Restart count threshold for namespace error analysis |
 
 ## Security
 
@@ -492,8 +696,10 @@ The agent is configured through environment variables:
 
 The agent requires minimal permissions:
 - `get`, `list` on `pods` (all namespaces)
+- `get`, `list` on `events` (all namespaces)
 - `get` on `nodes`
 - `get` on `nodes/metrics`
+- `get`, `list` on `deployments`, `statefulsets` (apps API group)
 
 ### Container Security
 

@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -1203,4 +1204,309 @@ func (s *podService) analyzeVolumeConstraints(ctx context.Context, pod *v1.Pod, 
 	}
 
 	return len(volumeIssues) == 0, volumeIssues
+}
+
+// GetPodFailureEvents returns analyzed failure events for a pod
+func (s *podService) GetPodFailureEvents(ctx context.Context, namespace, name string) (*models.PodFailureEvents, error) {
+	s.logger.Debug("getting pod failure events", "namespace", namespace, "pod", name)
+
+	// Get the pod to check if it exists and get its status
+	pod, err := s.GetPod(ctx, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get all events for this pod
+	events, err := s.getPodEvents(ctx, namespace, name)
+	if err != nil {
+		s.logger.Warn("failed to get pod events for failure analysis",
+			"namespace", namespace,
+			"pod", name,
+			"error", err.Error())
+		// Continue with empty events rather than failing
+		events = []models.EventInfo{}
+	}
+
+	// Analyze failure events
+	failureEvents := s.analyzeFailureEvents(events, pod)
+
+	// Build failure events response
+	result := &models.PodFailureEvents{
+		PodName:         name,
+		Namespace:       namespace,
+		TotalEvents:     len(events),
+		FailureEvents:   failureEvents,
+		EventCategories: make(map[models.FailureEventCategory]int),
+		PodPhase:        string(pod.Status.Phase),
+		PodStatus:       pod.Status.Reason,
+	}
+
+	// Count events by category and severity
+	for i := range failureEvents {
+		event := &failureEvents[i]
+		result.EventCategories[event.Category]++
+
+		switch event.Severity {
+		case "critical":
+			result.CriticalEvents++
+		case "warning":
+			result.WarningEvents++
+		}
+
+		// Track most recent issue
+		if result.MostRecentIssue == nil || event.LastTimestamp.After(result.MostRecentIssue.LastTimestamp.Time) {
+			result.MostRecentIssue = event
+		}
+	}
+
+	// Identify ongoing issues (events that occurred in the last 5 minutes)
+	result.OngoingIssues = s.identifyOngoingIssues(failureEvents)
+
+	s.logger.Debug("successfully analyzed pod failure events",
+		"namespace", namespace,
+		"pod", name,
+		"total_events", result.TotalEvents,
+		"failure_events", len(result.FailureEvents),
+		"critical_events", result.CriticalEvents,
+		"warning_events", result.WarningEvents)
+
+	return result, nil
+}
+
+// analyzeFailureEvents analyzes events to identify and categorize failures
+func (s *podService) analyzeFailureEvents(events []models.EventInfo, pod *v1.Pod) []models.FailureEvent {
+	failureEvents := []models.FailureEvent{}
+	now := time.Now()
+
+	// Define failure patterns to look for
+	failurePatterns := map[string]struct {
+		category        models.FailureEventCategory
+		severity        string
+		possibleCauses  []string
+		suggestedAction string
+	}{
+		"FailedScheduling": {
+			category:        models.FailureEventCategoryScheduling,
+			severity:        "critical",
+			possibleCauses:  []string{"Insufficient resources", "Node selector mismatch", "Affinity rules", "Taints not tolerated"},
+			suggestedAction: "Check node resources and scheduling constraints",
+		},
+		"BackOff": {
+			category:        models.FailureEventCategoryCrash,
+			severity:        "critical",
+			possibleCauses:  []string{"Application crash", "Missing dependencies", "Configuration error"},
+			suggestedAction: "Check container logs for crash details",
+		},
+		"CrashLoopBackOff": {
+			category:        models.FailureEventCategoryCrash,
+			severity:        "critical",
+			possibleCauses:  []string{"Repeated application crashes", "Startup failure", "Missing configuration"},
+			suggestedAction: "Examine container logs and fix application startup issues",
+		},
+		"ImagePullBackOff": {
+			category:        models.FailureEventCategoryImagePull,
+			severity:        "critical",
+			possibleCauses:  []string{"Image not found", "Registry authentication failure", "Network issues"},
+			suggestedAction: "Verify image name and registry credentials",
+		},
+		"ErrImagePull": {
+			category:        models.FailureEventCategoryImagePull,
+			severity:        "critical",
+			possibleCauses:  []string{"Invalid image name", "Registry unreachable", "No pull secrets"},
+			suggestedAction: "Check image availability and pull secrets",
+		},
+		"FailedAttachVolume": {
+			category:        models.FailureEventCategoryVolume,
+			severity:        "critical",
+			possibleCauses:  []string{"Volume already attached", "Volume not found", "Zone mismatch"},
+			suggestedAction: "Check volume status and node availability zones",
+		},
+		"FailedMount": {
+			category:        models.FailureEventCategoryVolume,
+			severity:        "critical",
+			possibleCauses:  []string{"Volume not ready", "Mount permissions", "Filesystem issues"},
+			suggestedAction: "Verify volume is properly provisioned and accessible",
+		},
+		"Unhealthy": {
+			category:        models.FailureEventCategoryProbe,
+			severity:        "warning",
+			possibleCauses:  []string{"Liveness probe failure", "Readiness probe failure", "Application not responding"},
+			suggestedAction: "Review probe configuration and application health endpoints",
+		},
+		"OOMKilled": {
+			category:        models.FailureEventCategoryResource,
+			severity:        "critical",
+			possibleCauses:  []string{"Memory limit exceeded", "Memory leak", "Insufficient memory allocation"},
+			suggestedAction: "Increase memory limits or optimize application memory usage",
+		},
+		"Evicted": {
+			category:        models.FailureEventCategoryResource,
+			severity:        "warning",
+			possibleCauses:  []string{"Node pressure", "Resource limits", "Priority preemption"},
+			suggestedAction: "Check node resources and pod priority settings",
+		},
+		"NetworkNotReady": {
+			category:        models.FailureEventCategoryNetwork,
+			severity:        "warning",
+			possibleCauses:  []string{"CNI plugin issues", "Network policy blocking", "Service mesh problems"},
+			suggestedAction: "Check network plugin status and network policies",
+		},
+	}
+
+	// Analyze each event
+	for _, event := range events {
+		// Skip normal events unless they have high frequency
+		if event.Type == "Normal" && event.Count < 5 {
+			continue
+		}
+
+		// Check if this matches any failure pattern
+		var failureEvent *models.FailureEvent
+		for pattern, config := range failurePatterns {
+			if strings.Contains(event.Reason, pattern) {
+				failureEvent = &models.FailureEvent{
+					EventInfo:       event,
+					Category:        config.category,
+					Severity:        config.severity,
+					PossibleCauses:  config.possibleCauses,
+					SuggestedAction: config.suggestedAction,
+				}
+				break
+			}
+		}
+
+		// If no specific pattern matched but it's a Warning event, categorize as Other
+		if failureEvent == nil && event.Type == "Warning" {
+			failureEvent = &models.FailureEvent{
+				EventInfo:       event,
+				Category:        models.FailureEventCategoryOther,
+				Severity:        "warning",
+				PossibleCauses:  []string{"Check event message for details"},
+				SuggestedAction: "Investigate based on event message",
+			}
+		}
+
+		// Skip if not a failure event
+		if failureEvent == nil {
+			continue
+		}
+
+		// Calculate recurrence information
+		if event.Count > 3 {
+			failureEvent.IsRecurring = true
+			duration := event.LastTimestamp.Sub(event.FirstTimestamp.Time)
+			if duration > 0 {
+				rate := float64(event.Count) / duration.Hours()
+				if rate > 1 {
+					failureEvent.RecurrenceRate = fmt.Sprintf("%.1f times per hour", rate)
+				} else {
+					failureEvent.RecurrenceRate = fmt.Sprintf("%d times in %.1f hours", event.Count, duration.Hours())
+				}
+			}
+		}
+
+		// Calculate time since first occurrence
+		timeSinceFirst := now.Sub(event.FirstTimestamp.Time)
+		if timeSinceFirst > 0 {
+			failureEvent.TimeSinceFirst = s.formatDuration(timeSinceFirst)
+		}
+
+		// Enhance with pod-specific context
+		s.enhanceFailureEventContext(failureEvent, pod)
+
+		failureEvents = append(failureEvents, *failureEvent)
+	}
+
+	// Sort by severity and recency
+	sort.Slice(failureEvents, func(i, j int) bool {
+		// First by severity
+		if failureEvents[i].Severity != failureEvents[j].Severity {
+			return s.severityWeight(failureEvents[i].Severity) > s.severityWeight(failureEvents[j].Severity)
+		}
+		// Then by most recent
+		return failureEvents[i].LastTimestamp.After(failureEvents[j].LastTimestamp.Time)
+	})
+
+	return failureEvents
+}
+
+// enhanceFailureEventContext adds pod-specific context to failure events
+func (s *podService) enhanceFailureEventContext(event *models.FailureEvent, pod *v1.Pod) {
+	// Add context based on event category
+	switch event.Category {
+	case models.FailureEventCategoryCrash:
+		// Check container statuses for additional context
+		for _, status := range pod.Status.ContainerStatuses {
+			if status.State.Terminated != nil && status.State.Terminated.ExitCode != 0 {
+				event.PossibleCauses = append(event.PossibleCauses,
+					fmt.Sprintf("Container %s exited with code %d", status.Name, status.State.Terminated.ExitCode))
+			}
+			if status.RestartCount > 0 {
+				event.PossibleCauses = append(event.PossibleCauses,
+					fmt.Sprintf("Container %s has restarted %d times", status.Name, status.RestartCount))
+			}
+		}
+	case models.FailureEventCategoryResource:
+		// Add resource request/limit information
+		if pod.Status.QOSClass == v1.PodQOSBurstable || pod.Status.QOSClass == v1.PodQOSBestEffort {
+			event.PossibleCauses = append(event.PossibleCauses,
+				fmt.Sprintf("Pod QoS class is %s - consider setting guaranteed QoS", pod.Status.QOSClass))
+		}
+	}
+}
+
+// identifyOngoingIssues identifies issues that are still occurring
+func (s *podService) identifyOngoingIssues(events []models.FailureEvent) []string {
+	ongoing := []string{}
+	threshold := time.Now().Add(-5 * time.Minute)
+
+	for _, event := range events {
+		if event.LastTimestamp.After(threshold) && event.Severity == "critical" {
+			issue := fmt.Sprintf("%s: %s", event.Reason, event.Message)
+			if len(issue) > 100 {
+				issue = issue[:97] + "..."
+			}
+			ongoing = append(ongoing, issue)
+		}
+	}
+
+	return ongoing
+}
+
+// formatDuration formats a duration into a human-readable string
+func (s *podService) formatDuration(d time.Duration) string {
+	if d < time.Minute {
+		return fmt.Sprintf("%ds", int(d.Seconds()))
+	}
+	if d < time.Hour {
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	}
+	if d < 24*time.Hour {
+		hours := int(d.Hours())
+		minutes := int(d.Minutes()) % 60
+		if minutes > 0 {
+			return fmt.Sprintf("%dh%dm", hours, minutes)
+		}
+		return fmt.Sprintf("%dh", hours)
+	}
+	days := int(d.Hours() / 24)
+	hours := int(d.Hours()) % 24
+	if hours > 0 {
+		return fmt.Sprintf("%dd%dh", days, hours)
+	}
+	return fmt.Sprintf("%dd", days)
+}
+
+// severityWeight returns a weight for sorting by severity
+func (s *podService) severityWeight(severity string) int {
+	switch severity {
+	case "critical":
+		return 3
+	case "warning":
+		return 2
+	case "info":
+		return 1
+	default:
+		return 0
+	}
 }

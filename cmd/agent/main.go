@@ -34,7 +34,7 @@ func main() {
 	}
 
 	// Create services
-	services := factory.NewServices(k8sClients, logger)
+	services := factory.NewServices(k8sClients, cfg, logger)
 
 	// Create router
 	r := router.NewRouter(services, logger)

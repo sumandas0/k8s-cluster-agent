@@ -133,6 +133,44 @@ func (h *PodHandlers) GetPodResources(w http.ResponseWriter, r *http.Request) {
 	responses.WriteJSON(w, responses.Success(resources))
 }
 
+// GetPodFailureEvents handles GET /api/v1/pods/{namespace}/{podName}/failure-events
+func (h *PodHandlers) GetPodFailureEvents(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	podName := chi.URLParam(r, "podName")
+	requestID := middleware.GetReqID(r.Context())
+
+	// Validate input
+	if err := validatePodParams(namespace, podName); err != nil {
+		h.logger.Warn("invalid pod failure events request",
+			"namespace", namespace,
+			"pod", podName,
+			"error", err.Error(),
+			"request_id", requestID,
+		)
+		responses.WriteBadRequest(w, err)
+		return
+	}
+
+	// Get pod failure events
+	failureEvents, err := h.podService.GetPodFailureEvents(r.Context(), namespace, podName)
+	if err != nil {
+		h.handleServiceError(w, r, err, "failed to get pod failure events", namespace, podName)
+		return
+	}
+
+	h.logger.Debug("pod failure events request successful",
+		"namespace", namespace,
+		"pod", podName,
+		"total_events", failureEvents.TotalEvents,
+		"failure_events", len(failureEvents.FailureEvents),
+		"critical_events", failureEvents.CriticalEvents,
+		"request_id", requestID,
+	)
+
+	// Write response
+	responses.WriteJSON(w, responses.Success(failureEvents))
+}
+
 // validatePodParams validates pod-related request parameters
 func validatePodParams(namespace, podName string) error {
 	if namespace == "" {

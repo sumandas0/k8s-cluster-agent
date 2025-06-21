@@ -27,6 +27,10 @@ type PodService interface {
 	// GetPodResources returns aggregated resource requirements for a pod.
 	// Returns ErrNotFound if the pod doesn't exist.
 	GetPodResources(ctx context.Context, namespace, name string) (*models.PodResources, error)
+
+	// GetPodFailureEvents returns analyzed failure events for a pod.
+	// Returns ErrNotFound if the pod doesn't exist.
+	GetPodFailureEvents(ctx context.Context, namespace, name string) (*models.PodFailureEvents, error)
 }
 
 // NodeService provides operations for querying node information
@@ -38,8 +42,17 @@ type NodeService interface {
 	GetNodeUtilization(ctx context.Context, nodeName string) (*models.NodeUtilization, error)
 }
 
+// NamespaceService provides operations for namespace-level analysis
+type NamespaceService interface {
+	// GetNamespaceErrors analyzes all pods in a namespace for issues.
+	// Only analyzes pods owned by Deployments and StatefulSets.
+	// Returns a comprehensive report of problematic pods and their issues.
+	GetNamespaceErrors(ctx context.Context, namespace string) (*models.NamespaceErrorReport, error)
+}
+
 // Services aggregates all service interfaces for easy dependency injection
 type Services struct {
-	Pod  PodService
-	Node NodeService
+	Pod       PodService
+	Node      NodeService
+	Namespace NamespaceService
 }

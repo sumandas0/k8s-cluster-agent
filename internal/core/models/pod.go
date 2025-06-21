@@ -217,3 +217,52 @@ type EventInfo struct {
 	Count          int32       `json:"count"`
 	Source         string      `json:"source"`
 }
+
+// FailureEventCategory represents the category of failure event
+type FailureEventCategory string
+
+const (
+	// Scheduling failures
+	FailureEventCategoryScheduling FailureEventCategory = "Scheduling"
+	// Image pull failures
+	FailureEventCategoryImagePull FailureEventCategory = "ImagePull"
+	// Container crash failures
+	FailureEventCategoryCrash FailureEventCategory = "ContainerCrash"
+	// Volume attachment failures
+	FailureEventCategoryVolume FailureEventCategory = "Volume"
+	// Resource limit failures
+	FailureEventCategoryResource FailureEventCategory = "Resource"
+	// Liveness/Readiness probe failures
+	FailureEventCategoryProbe FailureEventCategory = "Probe"
+	// Network/Service failures
+	FailureEventCategoryNetwork FailureEventCategory = "Network"
+	// Other uncategorized failures
+	FailureEventCategoryOther FailureEventCategory = "Other"
+)
+
+// FailureEvent represents a failure event with analysis
+type FailureEvent struct {
+	EventInfo
+	Category        FailureEventCategory `json:"category"`
+	Severity        string               `json:"severity"` // "critical", "warning", "info"
+	IsRecurring     bool                 `json:"isRecurring"`
+	RecurrenceRate  string               `json:"recurrenceRate,omitempty"` // e.g., "5 times in last hour"
+	TimeSinceFirst  string               `json:"timeSinceFirst,omitempty"` // e.g., "2h30m"
+	PossibleCauses  []string             `json:"possibleCauses,omitempty"`
+	SuggestedAction string               `json:"suggestedAction,omitempty"`
+}
+
+// PodFailureEvents contains failure events analysis for a pod
+type PodFailureEvents struct {
+	PodName         string                       `json:"podName"`
+	Namespace       string                       `json:"namespace"`
+	TotalEvents     int                          `json:"totalEvents"`
+	FailureEvents   []FailureEvent               `json:"failureEvents"`
+	EventCategories map[FailureEventCategory]int `json:"eventCategories"`
+	CriticalEvents  int                          `json:"criticalEvents"`
+	WarningEvents   int                          `json:"warningEvents"`
+	MostRecentIssue *FailureEvent                `json:"mostRecentIssue,omitempty"`
+	OngoingIssues   []string                     `json:"ongoingIssues,omitempty"`
+	PodPhase        string                       `json:"podPhase"`
+	PodStatus       string                       `json:"podStatus"`
+}

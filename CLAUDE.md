@@ -56,6 +56,7 @@ make tidy             # Clean up go.mod dependencies
 - `GET /api/v1/pods/{namespace}/{podName}/describe` - Full pod description
 - `GET /api/v1/pods/{namespace}/{podName}/scheduling` - Enhanced scheduling info with failure analysis
 - `GET /api/v1/pods/{namespace}/{podName}/resources` - Resource requirements
+- `GET /api/v1/pods/{namespace}/{podName}/failure-events` - Analyzed failure events with insights
 - `GET /api/v1/nodes/{nodeName}/utilization` - Node metrics (requires metrics server)
 
 #### Enhanced Scheduling API
@@ -97,6 +98,43 @@ Example response structure for pending pod:
       "insufficientResources": ["insufficient memory (requested: 2Gi, allocatable: 1Gi)"]
     }
   ]
+}
+```
+
+#### Failure Events API
+The `/failure-events` endpoint provides intelligent analysis of pod failure events:
+
+**Features:**
+- Categorizes failures into meaningful groups (Scheduling, ImagePull, ContainerCrash, Volume, Resource, Probe, Network)
+- Provides severity classification (critical, warning, info)
+- Tracks recurrence patterns and calculates rates
+- Offers actionable insights with possible causes and suggested actions
+- Identifies ongoing issues (last 5 minutes)
+
+Example response structure:
+```json
+{
+  "podName": "my-pod",
+  "namespace": "default",
+  "totalEvents": 15,
+  "failureEvents": [
+    {
+      "type": "Warning",
+      "reason": "CrashLoopBackOff",
+      "message": "Back-off restarting failed container",
+      "category": "ContainerCrash",
+      "severity": "critical",
+      "isRecurring": true,
+      "recurrenceRate": "6.0 times per hour",
+      "timeSinceFirst": "1h25m",
+      "possibleCauses": ["Application crash", "Missing dependencies"],
+      "suggestedAction": "Examine container logs and fix application startup issues"
+    }
+  ],
+  "eventCategories": {"ContainerCrash": 1, "Scheduling": 1},
+  "criticalEvents": 2,
+  "warningEvents": 0,
+  "ongoingIssues": ["CrashLoopBackOff: Back-off restarting failed container"]
 }
 ```
 
