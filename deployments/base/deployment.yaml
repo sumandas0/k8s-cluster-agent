@@ -6,7 +6,7 @@ metadata:
   labels:
     app: k8s-cluster-agent
 spec:
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: k8s-cluster-agent
@@ -22,7 +22,7 @@ spec:
         fsGroup: 65534
       containers:
       - name: agent
-        image: k8s-cluster-agent:latest
+        image: ghcr.io/sumandas0/k8s-cluster-agent:main-131dc4e
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
