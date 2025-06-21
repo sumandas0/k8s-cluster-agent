@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"runtime/debug"
 
+	"github.com/go-chi/chi/v5/middleware"
+
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
@@ -19,6 +21,7 @@ func RecoveryMiddleware(logger *slog.Logger) func(http.Handler) http.Handler {
 						"error", err,
 						"path", r.URL.Path,
 						"method", r.Method,
+						"request_id", middleware.GetReqID(r.Context()),
 						"stack", string(debug.Stack()),
 					)
 

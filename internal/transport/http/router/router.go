@@ -24,8 +24,8 @@ func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
 	r.Use(customMiddleware.TimeoutMiddleware(500 * time.Millisecond))
 
 	// Create handlers
-	podHandlers := handlers.NewPodHandlers(services.Pod)
-	nodeHandlers := handlers.NewNodeHandlers(services.Node)
+	podHandlers := handlers.NewPodHandlers(services.Pod, logger)
+	nodeHandlers := handlers.NewNodeHandlers(services.Node, logger)
 
 	// API routes
 	r.Route("/api/v1", func(r chi.Router) {

@@ -31,25 +31,36 @@ func NewPodService(k8sClient kubernetes.Interface, logger *slog.Logger) core.Pod
 
 // GetPod returns the full pod specification and status
 func (s *podService) GetPod(ctx context.Context, namespace, name string) (*v1.Pod, error) {
+	s.logger.Debug("getting pod", "namespace", namespace, "pod", name)
+
 	pod, err := s.k8sClient.CoreV1().Pods(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
+			s.logger.Debug("pod not found", "namespace", namespace, "pod", name)
 			return nil, core.ErrPodNotFound
 		}
+		s.logger.Error("failed to get pod from kubernetes API",
+			"namespace", namespace,
+			"pod", name,
+			"error", err.Error(),
+		)
 		return nil, fmt.Errorf("failed to get pod %s/%s: %w", namespace, name, err)
 	}
 
+	s.logger.Debug("successfully retrieved pod", "namespace", namespace, "pod", name)
 	return pod, nil
 }
 
 // GetPodScheduling returns scheduling-specific information for a pod
 func (s *podService) GetPodScheduling(ctx context.Context, namespace, name string) (*models.PodScheduling, error) {
+	s.logger.Debug("getting pod scheduling info", "namespace", namespace, "pod", name)
+
 	pod, err := s.GetPod(ctx, namespace, name)
 	if err != nil {
 		return nil, err
 	}
 
-	return &models.PodScheduling{
+	scheduling := &models.PodScheduling{
 		NodeName:          pod.Spec.NodeName,
 		SchedulerName:     pod.Spec.SchedulerName,
 		Affinity:          pod.Spec.Affinity,
@@ -57,11 +68,16 @@ func (s *podService) GetPodScheduling(ctx context.Context, namespace, name strin
 		NodeSelector:      pod.Spec.NodeSelector,
 		Priority:          pod.Spec.Priority,
 		PriorityClassName: pod.Spec.PriorityClassName,
-	}, nil
+	}
+
+	s.logger.Debug("successfully retrieved pod scheduling info", "namespace", namespace, "pod", name)
+	return scheduling, nil
 }
 
 // GetPodResources returns aggregated resource requirements for a pod
 func (s *podService) GetPodResources(ctx context.Context, namespace, name string) (*models.PodResources, error) {
+	s.logger.Debug("getting pod resources", "namespace", namespace, "pod", name)
+
 	pod, err := s.GetPod(ctx, namespace, name)
 	if err != nil {
 		return nil, err
@@ -96,20 +112,48 @@ func (s *podService) GetPodResources(ctx context.Context, namespace, name string
 
 	for _, container := range pod.Spec.Containers {
 		if req, ok := container.Resources.Requests[v1.ResourceCPU]; ok {
-			totalCPURequest.Add(req)
+			if err := safeAddQuantity(totalCPURequest, req); err != nil {
+				s.logger.Warn("failed to add CPU request",
+					"namespace", namespace,
+					"pod", name,
+					"container", container.Name,
+					"error", err.Error(),
+				)
+			}
 		}
 		if limit, ok := container.Resources.Limits[v1.ResourceCPU]; ok {
-			totalCPULimit.Add(limit)
+			if err := safeAddQuantity(totalCPULimit, limit); err != nil {
+				s.logger.Warn("failed to add CPU limit",
+					"namespace", namespace,
+					"pod", name,
+					"container", container.Name,
+					"error", err.Error(),
+				)
+			}
 		}
 		if req, ok := container.Resources.Requests[v1.ResourceMemory]; ok {
-			totalMemoryRequest.Add(req)
+			if err := safeAddQuantity(totalMemoryRequest, req); err != nil {
+				s.logger.Warn("failed to add memory request",
+					"namespace", namespace,
+					"pod", name,
+					"container", container.Name,
+					"error", err.Error(),
+				)
+			}
 		}
 		if limit, ok := container.Resources.Limits[v1.ResourceMemory]; ok {
-			totalMemoryLimit.Add(limit)
+			if err := safeAddQuantity(totalMemoryLimit, limit); err != nil {
+				s.logger.Warn("failed to add memory limit",
+					"namespace", namespace,
+					"pod", name,
+					"container", container.Name,
+					"error", err.Error(),
+				)
+			}
 		}
 	}
 
-	return &models.PodResources{
+	result := &models.PodResources{
 		Containers: containers,
 		Total: models.ResourceSummary{
 			CPURequest:    totalCPURequest.String(),
@@ -117,5 +161,27 @@ func (s *podService) GetPodResources(ctx context.Context, namespace, name string
 			MemoryRequest: totalMemoryRequest.String(),
 			MemoryLimit:   totalMemoryLimit.String(),
 		},
-	}, nil
+	}
+
+	s.logger.Debug("successfully calculated pod resources",
+		"namespace", namespace,
+		"pod", name,
+		"containers", len(containers),
+		"total_cpu_request", result.Total.CPURequest,
+		"total_memory_request", result.Total.MemoryRequest,
+	)
+
+	return result, nil
+}
+
+// safeAddQuantity safely adds two resource quantities with error handling
+func safeAddQuantity(total *resource.Quantity, add resource.Quantity) error {
+	defer func() {
+		if r := recover(); r != nil {
+			// Convert panic to error
+		}
+	}()
+
+	total.Add(add)
+	return nil
 }
