@@ -7,6 +7,8 @@ run:
 linters-settings:
   govet:
     check-shadowing: true
+    enable:
+      - shadow
   gocyclo:
     min-complexity: 15
   dupl:
@@ -36,25 +38,25 @@ linters-settings:
   funlen:
     lines: 100
     statements: 50
+  revive:
+    rules:
+      - name: exported
+        disabled: false
 
 linters:
   disable-all: true
   enable:
     - bodyclose
-    - deadcode
-    - depguard
-    - dogsled
     - dupl
     - errcheck
     - exportloopref
-    - exhaustive
     - funlen
     - goconst
     - gocritic
     - gocyclo
     - gofmt
     - goimports
-    - golint
+    - revive
     - gomnd
     - goprintffuncname
     - gosec
@@ -66,15 +68,12 @@ linters:
     - nakedret
     - noctx
     - nolintlint
-    - rowserrcheck
     - staticcheck
-    - structcheck
     - stylecheck
     - typecheck
     - unconvert
     - unparam
     - unused
-    - varcheck
     - whitespace
 
 issues:
