@@ -5,10 +5,12 @@ A lightweight in-cluster Kubernetes agent that provides read-only access to pod 
 ## Features
 
 - **Pod Information**: Get detailed pod information including scheduling details and resource requirements
+- **Enhanced Scheduling Analysis**: Comprehensive scheduling failure analysis for pending pods with per-node breakdown
 - **Node Utilization**: Retrieve real-time node resource utilization metrics
 - **Secure by Default**: Minimal RBAC permissions, read-only access
 - **High Performance**: 500ms request timeout, efficient resource usage
 - **Production Ready**: Health checks, structured logging, graceful shutdown
+- **Flexible Deployment**: Support for both Deployment and DaemonSet modes
 
 ## Architecture
 
@@ -41,22 +43,35 @@ cd k8s-cluster-agent
 make docker-build
 ```
 
-3. Deploy to Kubernetes (development):
+3. Deploy to Kubernetes:
+
+**Development (single replica with debug logging):**
 ```bash
 make deploy-dev
 ```
 
-For production deployment:
+**Production (with HPA and network policies):**
 ```bash
 make deploy-prod
 ```
 
-### Manual Installation
+### Deployment Options
 
-Apply the Kubernetes manifests directly:
+The agent supports multiple deployment strategies:
+
+#### Deployment (Default)
+Standard deployment with configurable replicas:
 ```bash
 kubectl apply -k deployments/overlays/development
 ```
+
+#### DaemonSet
+For running one instance per node:
+```bash
+kubectl apply -f deployments/base/deployment.yaml
+```
+
+Configure the deployment type in your overlay by setting the appropriate patches.
 
 ## API Documentation
 
@@ -180,17 +195,18 @@ curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/de
 GET /api/v1/pods/{namespace}/{podName}/scheduling
 ```
 
-Returns scheduling-specific information for a pod.
+Returns enhanced scheduling information for a pod, including comprehensive failure analysis for pending pods.
 
 **Example:**
 ```bash
 curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/default/my-pod/scheduling
 ```
 
-**Response:**
+**Response for Scheduled Pod:**
 ```json
 {
   "data": {
+    "status": "Scheduled",
     "nodeName": "node-1",
     "schedulerName": "default-scheduler",
     "nodeSelector": {
@@ -199,7 +215,19 @@ curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/de
     "tolerations": [],
     "affinity": null,
     "priority": 0,
-    "priorityClassName": ""
+    "priorityClassName": "",
+    "schedulingReasons": [
+      "Node node-1 matched pod affinity requirements",
+      "Node has sufficient resources (CPU: 2/4 cores, Memory: 4Gi/8Gi)"
+    ],
+    "schedulingEvents": [
+      {
+        "type": "Normal",
+        "reason": "Scheduled",
+        "message": "Successfully assigned default/my-pod to node-1",
+        "timestamp": "2023-06-21T10:25:00Z"
+      }
+    ]
   },
   "metadata": {
     "requestId": "123e4567-e89b-12d3-a456-426614174000",
@@ -207,6 +235,63 @@ curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/de
   }
 }
 ```
+
+**Response for Pending Pod with Scheduling Failures:**
+```json
+{
+  "data": {
+    "status": "Pending",
+    "failureCategories": ["InsufficientMemory", "VolumeNodeAffinityConflict"],
+    "failureSummary": [
+      {
+        "category": "InsufficientMemory",
+        "count": 3,
+        "description": "Insufficient memory resources available on nodes",
+        "nodes": ["node-1", "node-2", "node-3"]
+      },
+      {
+        "category": "VolumeNodeAffinityConflict",
+        "count": 1,
+        "description": "Persistent volume zone affinity doesn't match node zone",
+        "nodes": ["node-4"]
+      }
+    ],
+    "unschedulableNodes": [
+      {
+        "nodeName": "node-1",
+        "reasons": ["insufficient memory", "PV zone doesn't match node"],
+        "insufficientResources": ["insufficient memory (requested: 2Gi, allocatable: 1Gi)"],
+        "categories": ["InsufficientMemory", "VolumeNodeAffinityConflict"]
+      }
+    ],
+    "schedulingEvents": [
+      {
+        "type": "Warning",
+        "reason": "FailedScheduling",
+        "message": "0/4 nodes are available: 3 insufficient memory, 1 node(s) had volume affinity conflict",
+        "timestamp": "2023-06-21T10:25:00Z"
+      }
+    ]
+  },
+  "metadata": {
+    "requestId": "123e4567-e89b-12d3-a456-426614174000",
+    "timestamp": "2023-06-21T10:30:00Z"
+  }
+}
+```
+
+**Failure Categories:**
+- `InsufficientCPU`: Not enough CPU resources
+- `InsufficientMemory`: Not enough memory resources
+- `InsufficientStorage`: Not enough ephemeral storage
+- `VolumeAttachmentError`: Volume attachment issues
+- `VolumeMultiAttachError`: Volume attached to multiple nodes
+- `VolumeNodeAffinityConflict`: Volume zone doesn't match node
+- `NodeAffinityNotMatch`: Pod node affinity requirements not met
+- `TaintTolerationMismatch`: Node taints not tolerated by pod
+- `PodAffinityConflict`: Pod affinity/anti-affinity conflicts
+- `NodeNotReady`: Node is not in ready state
+- `Miscellaneous`: Other scheduling failures
 
 #### Get Pod Resources
 ```http
@@ -336,52 +421,56 @@ go mod download
 make test
 ```
 
-4. Run linter:
+4. Run all checks:
 ```bash
-make lint
+make check  # Runs tidy, lint, and tests
 ```
 
-### Building
+### Common Commands
 
-Build the binary:
 ```bash
-make build
-```
+# Building
+make build              # Build local binary
+make docker-build       # Build Docker image
+make run               # Run locally (requires kubeconfig)
 
-Build Docker image:
-```bash
-make docker-build
-```
+# Testing & Quality
+make test              # Run unit tests with coverage
+make test-integration  # Run integration tests
+make lint             # Run golangci-lint
+make coverage         # View HTML coverage report
+make check            # Run all checks (tidy, lint, test)
 
-### Testing
+# Deployment
+make deploy-dev        # Deploy to development
+make deploy-prod       # Deploy to production
 
-Run unit tests:
-```bash
-make test
-```
-
-Run integration tests:
-```bash
-make test-integration
-```
-
-View coverage report:
-```bash
-make coverage
+# Development
+make generate-mocks    # Generate mocks from interfaces
+make tidy             # Clean up go.mod dependencies
 ```
 
 ### Project Structure
 
 ```
 k8s-cluster-agent/
-├── cmd/agent/          # Application entry point
-├── internal/           # Private application code
-│   ├── core/          # Business logic
-│   ├── transport/     # HTTP handlers and middleware
-│   └── kubernetes/    # Kubernetes client
-├── deployments/       # Kubernetes manifests
-├── build/            # Docker and build files
-└── docs/             # Documentation
+├── cmd/agent/             # Application entry point
+├── internal/              # Private application code
+│   ├── core/             # Business logic
+│   │   ├── domain/       # Domain models and interfaces
+│   │   ├── ports/        # Service interfaces
+│   │   └── services/     # Service implementations
+│   ├── transport/        # HTTP handlers and middleware
+│   │   └── http/         # REST API implementation
+│   └── kubernetes/       # Kubernetes client
+├── deployments/          # Kubernetes manifests
+│   ├── base/            # Base manifests
+│   └── overlays/        # Environment-specific overlays
+│       ├── development/  # Dev configuration
+│       └── production/   # Prod configuration
+├── build/               # Docker and build files
+├── docs/                # Documentation
+└── CLAUDE.md            # AI assistant instructions
 ```
 
 ## Configuration
@@ -420,9 +509,17 @@ The agent requires minimal permissions:
 - `/healthz` - Liveness probe
 - `/readyz` - Readiness probe
 
+### Logging
+
+The agent uses structured logging with slog. All requests are logged with:
+- Request ID for tracing
+- Response time
+- Status code
+- Error details (if any)
+
 ### Metrics
 
-The agent logs all requests with duration and status code. In production, these can be scraped for monitoring.
+In production, logs can be parsed and aggregated for monitoring request latency, error rates, and resource usage patterns.
 
 ## Contributing
 
