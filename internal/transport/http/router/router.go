@@ -10,6 +10,7 @@ import (
 	"github.com/sumandas0/k8s-cluster-agent/internal/core"
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/handlers"
 	customMiddleware "github.com/sumandas0/k8s-cluster-agent/internal/transport/http/middleware"
+	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/openapi"
 )
 
 func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
@@ -46,6 +47,8 @@ func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
 
 	r.Get("/healthz", handlers.HandleHealth)
 	r.Get("/readyz", handlers.HandleReadiness)
+
+	r.Mount("/swagger", openapi.SwaggerHandler())
 
 	return r
 }

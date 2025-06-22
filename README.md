@@ -79,6 +79,17 @@ Configure the deployment type in your overlay by setting the appropriate patches
 
 ## API Documentation
 
+### Interactive API Documentation
+
+The agent provides interactive API documentation via Swagger UI:
+- **Swagger UI**: `http://<service-name>.<namespace>.svc.cluster.local/swagger/`
+- **OpenAPI Spec**: Available at `/docs/swagger.json` and `/docs/swagger.yaml`
+
+To regenerate API documentation after making changes:
+```bash
+make generate-openapi
+```
+
 ### Base URL
 ```
 http://<service-name>.<namespace>.svc.cluster.local/api/v1
@@ -890,6 +901,7 @@ make deploy-prod       # Deploy to production
 
 # Development
 make generate-mocks    # Generate mocks from interfaces
+make generate-openapi  # Generate OpenAPI documentation
 make tidy             # Clean up go.mod dependencies
 ```
 

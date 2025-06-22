@@ -34,6 +34,7 @@ make deploy-prod       # Deploy to production (with HPA, network policies)
 ### Development Utilities
 ```bash
 make generate-mocks    # Generate mocks from interfaces
+make generate-openapi  # Generate OpenAPI documentation
 make deps             # Install development dependencies
 make tidy             # Clean up go.mod dependencies
 ```
@@ -62,6 +63,11 @@ make tidy             # Clean up go.mod dependencies
 - `GET /api/v1/pods/{namespace}/{podName}/health-score` - Pod health score with detailed component analysis
 - `GET /api/v1/nodes/{nodeName}/utilization` - Node metrics (requires metrics server)
 - `GET /api/v1/cluster/pod-issues` - Cluster-wide pod issues dashboard with pattern detection
+
+#### API Documentation
+- `GET /swagger/` - Interactive OpenAPI documentation (Swagger UI)
+- OpenAPI specs available at `/docs/swagger.json` and `/docs/swagger.yaml`
+- Use `make generate-openapi` to regenerate documentation after API changes
 
 #### Enhanced Scheduling API
 The `/scheduling` endpoint provides comprehensive scheduling analysis:

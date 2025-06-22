@@ -53,7 +53,8 @@ generate-mocks:
 # Generate OpenAPI spec
 .PHONY: generate-openapi
 generate-openapi:
-	./scripts/generate-openapi.sh
+	@echo "Generating OpenAPI documentation..."
+	@swag init -g cmd/agent/main.go -o docs --parseInternal --parseDependency
 
 # Clean build artifacts
 .PHONY: clean
@@ -72,6 +73,7 @@ deps:
 	$(GO) mod download
 	$(GO) install github.com/golang/mock/mockgen@latest
 	$(GO) install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	$(GO) install github.com/swaggo/swag/cmd/swag@latest
 
 # Tidy dependencies
 .PHONY: tidy

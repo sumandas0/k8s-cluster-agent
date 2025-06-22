@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/sumandas0/k8s-cluster-agent/internal/core"
+	_ "github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
@@ -25,6 +26,20 @@ func NewHealthScoreHandler(service core.HealthScoreService, logger *slog.Logger)
 	}
 }
 
+// GetPodHealthScore calculates and returns a comprehensive health score for a pod
+// @Summary Get pod health score
+// @Description Returns a health score (0-100) with detailed component analysis including restarts, container states, events, and uptime
+// @Tags Pods
+// @Accept json
+// @Produce json
+// @Param namespace path string true "Namespace name"
+// @Param podName path string true "Pod name"
+// @Success 200 {object} responses.SuccessResponse{data=models.PodHealthScore} "Pod health score with detailed analysis"
+// @Failure 400 {object} responses.ErrorResponse "Bad request - invalid parameters"
+// @Failure 404 {object} responses.ErrorResponse "Pod not found"
+// @Failure 408 {object} responses.ErrorResponse "Request timeout"
+// @Failure 500 {object} responses.ErrorResponse "Internal server error"
+// @Router /pods/{namespace}/{podName}/health-score [get]
 func (h *HealthScoreHandler) GetPodHealthScore(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	podName := chi.URLParam(r, "podName")

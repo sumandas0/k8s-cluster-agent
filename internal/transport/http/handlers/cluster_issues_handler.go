@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/sumandas0/k8s-cluster-agent/internal/core"
+	_ "github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
@@ -23,6 +24,18 @@ func NewClusterIssuesHandler(service core.ClusterIssuesService, logger *slog.Log
 	}
 }
 
+// GetClusterIssues returns a cluster-wide dashboard of pod issues
+// @Summary Get cluster-wide pod issues
+// @Description Returns an aggregated view of pod issues across the cluster with pattern detection and trend analysis
+// @Tags Cluster
+// @Accept json
+// @Produce json
+// @Param namespace query string false "Filter by namespace (default: all)"
+// @Param severity query string false "Filter by severity (critical, warning, info)"
+// @Success 200 {object} responses.SuccessResponse{data=models.ClusterIssues} "Cluster issues dashboard"
+// @Failure 408 {object} responses.ErrorResponse "Request timeout"
+// @Failure 500 {object} responses.ErrorResponse "Internal server error"
+// @Router /cluster/pod-issues [get]
 func (h *ClusterIssuesHandler) GetClusterIssues(w http.ResponseWriter, r *http.Request) {
 	requestID := middleware.GetReqID(r.Context())
 

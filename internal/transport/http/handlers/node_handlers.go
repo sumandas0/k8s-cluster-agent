@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/sumandas0/k8s-cluster-agent/internal/core"
+	_ "github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
@@ -26,6 +27,20 @@ func NewNodeHandlers(nodeService core.NodeService, logger *slog.Logger) *NodeHan
 	}
 }
 
+// GetNodeUtilization returns resource utilization metrics for a node
+// @Summary Get node utilization metrics
+// @Description Returns CPU and memory utilization metrics for the specified node (requires metrics server)
+// @Tags Nodes
+// @Accept json
+// @Produce json
+// @Param nodeName path string true "Node name"
+// @Success 200 {object} responses.SuccessResponse{data=models.NodeUtilization} "Node utilization metrics"
+// @Failure 400 {object} responses.ErrorResponse "Bad request - invalid parameters"
+// @Failure 404 {object} responses.ErrorResponse "Node not found"
+// @Failure 408 {object} responses.ErrorResponse "Request timeout"
+// @Failure 503 {object} responses.ErrorResponse "Metrics server not available"
+// @Failure 500 {object} responses.ErrorResponse "Internal server error"
+// @Router /nodes/{nodeName}/utilization [get]
 func (h *NodeHandlers) GetNodeUtilization(w http.ResponseWriter, r *http.Request) {
 	nodeName := chi.URLParam(r, "nodeName")
 	requestID := middleware.GetReqID(r.Context())

@@ -1,0 +1,2493 @@
+{
+    "schemes": [
+        "http",
+        "https"
+    ],
+    "swagger": "2.0",
+    "info": {
+        "description": "A lightweight, read-only Kubernetes service that provides a RESTful API for querying pod and node information\n\nThe K8s Cluster Agent runs inside a Kubernetes cluster and provides various endpoints for:\n- Pod information (description, scheduling, resources, health)\n- Node utilization metrics\n- Cluster-wide pod issues dashboard\n- Namespace error analysis",
+        "title": "K8s Cluster Agent API",
+        "contact": {
+            "name": "K8s Cluster Agent Team",
+            "url": "https://github.com/sumandas0/k8s-cluster-agent"
+        },
+        "license": {
+            "name": "Apache 2.0",
+            "url": "http://www.apache.org/licenses/LICENSE-2.0.html"
+        },
+        "version": "1.0"
+    },
+    "host": "localhost:8080",
+    "basePath": "/api/v1",
+    "paths": {
+        "/cluster/pod-issues": {
+            "get": {
+                "description": "Returns an aggregated view of pod issues across the cluster with pattern detection and trend analysis",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Cluster"
+                ],
+                "summary": "Get cluster-wide pod issues",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by namespace (default: all)",
+                        "name": "namespace",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by severity (critical, warning, info)",
+                        "name": "severity",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Cluster issues dashboard",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ClusterIssues"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/healthz": {
+            "get": {
+                "description": "Returns the health status of the K8s Cluster Agent service",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Health check endpoint",
+                "responses": {
+                    "200": {
+                        "description": "Service is healthy",
+                        "schema": {
+                            "$ref": "#/definitions/internal_transport_http_handlers.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/namespace/{namespace}/error": {
+            "get": {
+                "description": "Returns a comprehensive error analysis report for all pods in the specified namespace",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Namespace"
+                ],
+                "summary": "Get namespace error analysis",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace name",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Namespace error analysis report",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NamespaceErrorReport"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/nodes/{nodeName}/utilization": {
+            "get": {
+                "description": "Returns CPU and memory utilization metrics for the specified node (requires metrics server)",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Nodes"
+                ],
+                "summary": "Get node utilization metrics",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Node name",
+                        "name": "nodeName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Node utilization metrics",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeUtilization"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Node not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Metrics server not available",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{namespace}/{podName}/describe": {
+            "get": {
+                "description": "Returns comprehensive pod information including status, containers, volumes, and conditions",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pods"
+                ],
+                "summary": "Get pod description",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace name",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pod name",
+                        "name": "podName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pod description",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "type": "object",
+                                            "additionalProperties": true
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{namespace}/{podName}/failure-events": {
+            "get": {
+                "description": "Returns categorized and analyzed failure events with insights and recommendations",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pods"
+                ],
+                "summary": "Get pod failure events analysis",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace name",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pod name",
+                        "name": "podName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pod failure events analysis",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodFailureEvents"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{namespace}/{podName}/health-score": {
+            "get": {
+                "description": "Returns a health score (0-100) with detailed component analysis including restarts, container states, events, and uptime",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pods"
+                ],
+                "summary": "Get pod health score",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace name",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pod name",
+                        "name": "podName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pod health score with detailed analysis",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodHealthScore"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{namespace}/{podName}/resources": {
+            "get": {
+                "description": "Returns detailed resource requirements (CPU, memory) for all containers in the pod",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pods"
+                ],
+                "summary": "Get pod resource information",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace name",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pod name",
+                        "name": "podName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pod resource information",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodResources"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{namespace}/{podName}/scheduling": {
+            "get": {
+                "description": "Returns comprehensive scheduling analysis including placement decisions, failure reasons, and constraints",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pods"
+                ],
+                "summary": "Get pod scheduling information",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace name",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pod name",
+                        "name": "podName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pod scheduling information",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodScheduling"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/pods/{namespace}/{podName}/scheduling/explain": {
+            "get": {
+                "description": "Returns Elasticsearch-style detailed explanations for pod scheduling decisions with per-node analysis",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Pods"
+                ],
+                "summary": "Get detailed pod scheduling explanation",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Namespace name",
+                        "name": "namespace",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Pod name",
+                        "name": "podName",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Pod scheduling explanation",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingExplanation"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad request - invalid parameters",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Pod not found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "408": {
+                        "description": "Request timeout",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/readyz": {
+            "get": {
+                "description": "Returns the readiness status of the K8s Cluster Agent service",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Health"
+                ],
+                "summary": "Readiness check endpoint",
+                "responses": {
+                    "200": {
+                        "description": "Service is ready",
+                        "schema": {
+                            "$ref": "#/definitions/internal_transport_http_handlers.HealthResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.AffinityExplanation": {
+            "type": "object",
+            "properties": {
+                "nodeAffinity": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeAffinityDetail"
+                },
+                "nodeSelector": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SelectorExplanation"
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ClusterIssues": {
+            "type": "object",
+            "properties": {
+                "calculatedAt": {
+                    "type": "string"
+                },
+                "criticalIssues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ClusterPodIssue"
+                    }
+                },
+                "healthyPods": {
+                    "type": "integer"
+                },
+                "issueCategories": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "issueVelocity": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.IssueVelocity"
+                },
+                "issuesByNamespace": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NamespaceIssues"
+                    }
+                },
+                "patterns": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.IssuePattern"
+                    }
+                },
+                "topIssues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.IssueSummary"
+                    }
+                },
+                "totalPods": {
+                    "type": "integer"
+                },
+                "unhealthyPods": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ClusterPodIssue": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "containerName": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "firstSeen": {
+                    "type": "string"
+                },
+                "isRecurring": {
+                    "type": "boolean"
+                },
+                "lastSeen": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "nodeName": {
+                    "type": "string"
+                },
+                "podName": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ConditionStatus": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ContainerHealth": {
+            "type": "object",
+            "properties": {
+                "exitCode": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "ready": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "restartCount": {
+                    "type": "integer"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ContainerResources": {
+            "type": "object",
+            "properties": {
+                "limits": {
+                    "$ref": "#/definitions/v1.ResourceList"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "requests": {
+                    "$ref": "#/definitions/v1.ResourceList"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.EventInfo": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "firstTimestamp": {
+                    "type": "string"
+                },
+                "lastTimestamp": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.EventSummary": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "lastSeen": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.FailureCategorySummary": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingFailureCategory"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "nodes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.FailureEvent": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.FailureEventCategory"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "firstTimestamp": {
+                    "type": "string"
+                },
+                "isRecurring": {
+                    "type": "boolean"
+                },
+                "lastTimestamp": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "possibleCauses": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "recurrenceRate": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "suggestedAction": {
+                    "type": "string"
+                },
+                "timeSinceFirst": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.FailureEventCategory": {
+            "type": "string",
+            "enum": [
+                "Scheduling",
+                "ImagePull",
+                "ContainerCrash",
+                "Volume",
+                "Resource",
+                "Probe",
+                "Network",
+                "Other"
+            ],
+            "x-enum-varnames": [
+                "FailureEventCategoryScheduling",
+                "FailureEventCategoryImagePull",
+                "FailureEventCategoryCrash",
+                "FailureEventCategoryVolume",
+                "FailureEventCategoryResource",
+                "FailureEventCategoryProbe",
+                "FailureEventCategoryNetwork",
+                "FailureEventCategoryOther"
+            ]
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.HealthComponent": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "score": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "weight": {
+                    "type": "number"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.HealthDetails": {
+            "type": "object",
+            "properties": {
+                "containerStatuses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ContainerHealth"
+                    }
+                },
+                "lastRestartReason": {
+                    "type": "string"
+                },
+                "lastRestartTime": {
+                    "type": "string"
+                },
+                "podConditions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ConditionStatus"
+                    }
+                },
+                "recentEvents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.EventSummary"
+                    }
+                },
+                "restartCount": {
+                    "type": "integer"
+                },
+                "restartFrequency": {
+                    "type": "string"
+                },
+                "uptime": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.IssuePattern": {
+            "type": "object",
+            "properties": {
+                "commonLabels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "firstSeen": {
+                    "type": "string"
+                },
+                "lastSeen": {
+                    "type": "string"
+                },
+                "namespaces": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.IssueSummary": {
+            "type": "object",
+            "properties": {
+                "affectedPods": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "category": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.IssueVelocity": {
+            "type": "object",
+            "properties": {
+                "newIssuesLast24h": {
+                    "type": "integer"
+                },
+                "newIssuesLastHour": {
+                    "type": "integer"
+                },
+                "resolvedLast24h": {
+                    "type": "integer"
+                },
+                "resolvedLastHour": {
+                    "type": "integer"
+                },
+                "trendDirection": {
+                    "type": "string"
+                },
+                "velocityPerHour": {
+                    "type": "number"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NamespaceErrorReport": {
+            "type": "object",
+            "properties": {
+                "analysisTime": {
+                    "type": "string"
+                },
+                "criticalIssuesCount": {
+                    "type": "integer"
+                },
+                "healthyPodsCount": {
+                    "type": "integer"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "problematicPods": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ProblematicPod"
+                    }
+                },
+                "problematicPodsCount": {
+                    "type": "integer"
+                },
+                "restartThresholdUsed": {
+                    "type": "integer"
+                },
+                "summary": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NamespaceErrorSummary"
+                    }
+                },
+                "totalPodsAnalyzed": {
+                    "type": "integer"
+                },
+                "warningIssuesCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NamespaceErrorSummary": {
+            "type": "object",
+            "properties": {
+                "affectedPods": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "issueType": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodIssueType"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NamespaceIssues": {
+            "type": "object",
+            "properties": {
+                "criticalCount": {
+                    "type": "integer"
+                },
+                "issuesCount": {
+                    "type": "integer"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "topIssues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ClusterPodIssue"
+                    }
+                },
+                "totalPods": {
+                    "type": "integer"
+                },
+                "warningCount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeAffinityDetail": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string"
+                },
+                "failedTerms": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "preferredScore": {
+                    "type": "integer"
+                },
+                "requiredMatched": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeReadyExplanation": {
+            "type": "object",
+            "properties": {
+                "conditions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "ready": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeSchedulingExplanation": {
+            "type": "object",
+            "properties": {
+                "nodeName": {
+                    "type": "string"
+                },
+                "reasons": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeSchedulingReasons"
+                },
+                "recommendation": {
+                    "type": "string"
+                },
+                "schedulable": {
+                    "type": "boolean"
+                },
+                "score": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeSchedulingReasons": {
+            "type": "object",
+            "properties": {
+                "affinity": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.AffinityExplanation"
+                },
+                "nodeReady": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeReadyExplanation"
+                },
+                "podAffinity": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodAffinityExplanation"
+                },
+                "resources": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceExplanation"
+                },
+                "taints": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.TaintExplanation"
+                },
+                "volume": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.VolumeExplanation"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeUtilization": {
+            "type": "object",
+            "properties": {
+                "cpuCapacity": {
+                    "type": "string"
+                },
+                "cpuPercentage": {
+                    "type": "number"
+                },
+                "cpuUsage": {
+                    "type": "string"
+                },
+                "memoryCapacity": {
+                    "type": "string"
+                },
+                "memoryPercentage": {
+                    "type": "number"
+                },
+                "memoryUsage": {
+                    "type": "string"
+                },
+                "nodeName": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodAffinityExplanation": {
+            "type": "object",
+            "properties": {
+                "antiAffinityFailed": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "conflictingPods": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "details": {
+                    "type": "string"
+                },
+                "requiredNotMet": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "satisfied": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodFailureEvents": {
+            "type": "object",
+            "properties": {
+                "criticalEvents": {
+                    "type": "integer"
+                },
+                "eventCategories": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "failureEvents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.FailureEvent"
+                    }
+                },
+                "mostRecentIssue": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.FailureEvent"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "ongoingIssues": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "podName": {
+                    "type": "string"
+                },
+                "podPhase": {
+                    "type": "string"
+                },
+                "podStatus": {
+                    "type": "string"
+                },
+                "totalEvents": {
+                    "type": "integer"
+                },
+                "warningEvents": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodHealthScore": {
+            "type": "object",
+            "properties": {
+                "calculatedAt": {
+                    "type": "string"
+                },
+                "components": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.HealthComponent"
+                    }
+                },
+                "details": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.HealthDetails"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "overallScore": {
+                    "type": "integer"
+                },
+                "podName": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodIssue": {
+            "type": "object",
+            "properties": {
+                "description": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "string"
+                },
+                "severity": {
+                    "type": "string"
+                },
+                "type": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodIssueType"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodIssueType": {
+            "type": "string",
+            "enum": [
+                "HighRestarts",
+                "Pending",
+                "Failed",
+                "CrashLoopBackOff",
+                "ImagePullError",
+                "ResourceConstraints",
+                "Unschedulable"
+            ],
+            "x-enum-varnames": [
+                "PodIssueHighRestarts",
+                "PodIssuePending",
+                "PodIssueFailed",
+                "PodIssueCrashLoop",
+                "PodIssueImagePull",
+                "PodIssueResourceConstraints",
+                "PodIssueUnschedulable"
+            ]
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodResources": {
+            "type": "object",
+            "properties": {
+                "containers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ContainerResources"
+                    }
+                },
+                "total": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceSummary"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodScheduling": {
+            "type": "object",
+            "properties": {
+                "affinity": {
+                    "$ref": "#/definitions/v1.Affinity"
+                },
+                "conditions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.PodCondition"
+                    }
+                },
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingEvent"
+                    }
+                },
+                "failureCategories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingFailureCategory"
+                    }
+                },
+                "failureSummary": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.FailureCategorySummary"
+                    }
+                },
+                "nodeName": {
+                    "type": "string"
+                },
+                "nodeSelector": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "priority": {
+                    "type": "integer"
+                },
+                "priorityClassName": {
+                    "type": "string"
+                },
+                "schedulerName": {
+                    "type": "string"
+                },
+                "schedulingDecisions": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingDecisions"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tolerations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.Toleration"
+                    }
+                },
+                "unschedulableNodes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.UnschedulableNode"
+                    }
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ProblematicPod": {
+            "type": "object",
+            "properties": {
+                "age": {
+                    "type": "string"
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.PodIssue"
+                    }
+                },
+                "name": {
+                    "type": "string"
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "ownerKind": {
+                    "type": "string"
+                },
+                "ownerName": {
+                    "type": "string"
+                },
+                "phase": {
+                    "type": "string"
+                },
+                "recentEvents": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.EventInfo"
+                    }
+                },
+                "restartCount": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceDetail": {
+            "type": "object",
+            "properties": {
+                "nodeAllocatable": {
+                    "type": "string"
+                },
+                "nodeAllocated": {
+                    "type": "string"
+                },
+                "nodeAvailable": {
+                    "type": "string"
+                },
+                "nodeCapacity": {
+                    "type": "string"
+                },
+                "percentUsed": {
+                    "type": "number"
+                },
+                "podRequests": {
+                    "type": "string"
+                },
+                "recommendation": {
+                    "type": "string"
+                },
+                "shortage": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceExplanation": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceDetail"
+                    }
+                },
+                "fits": {
+                    "type": "boolean"
+                },
+                "summary": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceFitDetails": {
+            "type": "object",
+            "properties": {
+                "fits": {
+                    "type": "boolean"
+                },
+                "nodeAllocatable": {
+                    "$ref": "#/definitions/v1.ResourceList"
+                },
+                "nodeCapacity": {
+                    "$ref": "#/definitions/v1.ResourceList"
+                },
+                "nodeRequested": {
+                    "$ref": "#/definitions/v1.ResourceList"
+                },
+                "podRequests": {
+                    "$ref": "#/definitions/v1.ResourceList"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceSummary": {
+            "type": "object",
+            "properties": {
+                "cpuLimit": {
+                    "type": "string"
+                },
+                "cpuRequest": {
+                    "type": "string"
+                },
+                "memoryLimit": {
+                    "type": "string"
+                },
+                "memoryRequest": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingDecisions": {
+            "type": "object",
+            "properties": {
+                "matchedAffinity": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "matchedNodeSelector": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "nodeScore": {
+                    "type": "integer"
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "resourcesFit": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.ResourceFitDetails"
+                },
+                "selectedNode": {
+                    "type": "string"
+                },
+                "toleratedTaints": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingEvent": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingExplanation": {
+            "type": "object",
+            "properties": {
+                "events": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingEvent"
+                    }
+                },
+                "namespace": {
+                    "type": "string"
+                },
+                "nodeAnalysis": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.NodeSchedulingExplanation"
+                    }
+                },
+                "nodeName": {
+                    "type": "string"
+                },
+                "podName": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "summary": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingSummary"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingFailureCategory": {
+            "type": "string",
+            "enum": [
+                "InsufficientCPU",
+                "InsufficientMemory",
+                "InsufficientStorage",
+                "VolumeAttachmentError",
+                "VolumeMultiAttachError",
+                "VolumeNodeAffinityConflict",
+                "NodeAffinityNotMatch",
+                "TaintTolerationMismatch",
+                "PodAffinityConflict",
+                "NodeNotReady",
+                "Miscellaneous"
+            ],
+            "x-enum-varnames": [
+                "FailureCategoryResourceCPU",
+                "FailureCategoryResourceMemory",
+                "FailureCategoryResourceStorage",
+                "FailureCategoryVolumeAttachment",
+                "FailureCategoryVolumeMultiAttach",
+                "FailureCategoryVolumeNodeAffinity",
+                "FailureCategoryNodeAffinity",
+                "FailureCategoryTaints",
+                "FailureCategoryPodAffinity",
+                "FailureCategoryNodeNotReady",
+                "FailureCategoryMiscellaneous"
+            ]
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.SchedulingSummary": {
+            "type": "object",
+            "properties": {
+                "filteredByNodeAffinity": {
+                    "type": "integer"
+                },
+                "filteredByNodeNotReady": {
+                    "type": "integer"
+                },
+                "filteredByNodeSelector": {
+                    "type": "integer"
+                },
+                "filteredByPodAffinity": {
+                    "type": "integer"
+                },
+                "filteredByResources": {
+                    "type": "integer"
+                },
+                "filteredByTaints": {
+                    "type": "integer"
+                },
+                "filteredByVolume": {
+                    "type": "integer"
+                },
+                "possibleActions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "recommendation": {
+                    "type": "string"
+                },
+                "totalNodes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.SelectorExplanation": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string"
+                },
+                "matched": {
+                    "type": "boolean"
+                },
+                "missingLabels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nodeLabels": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "required": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.TaintExplanation": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string"
+                },
+                "nodeTaints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.TaintInfo"
+                    }
+                },
+                "podTolerations": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "tolerated": {
+                    "type": "boolean"
+                },
+                "untoleratedTaints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.TaintInfo"
+                    }
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.TaintInfo": {
+            "type": "object",
+            "properties": {
+                "effect": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.UnschedulableNode": {
+            "type": "object",
+            "properties": {
+                "insufficientResources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nodeName": {
+                    "type": "string"
+                },
+                "podAffinityConflicts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "reasons": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "unmatchedAffinity": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "unmatchedSelectors": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "untoleratedTaints": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_core_models.TaintInfo"
+                    }
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_core_models.VolumeExplanation": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string"
+                },
+                "issues": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "satisfied": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorDetail": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "details": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorResponse": {
+            "type": "object",
+            "properties": {
+                "error": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.ErrorDetail"
+                },
+                "metadata": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.Metadata"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.Metadata": {
+            "type": "object",
+            "properties": {
+                "requestId": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.SuccessResponse": {
+            "type": "object",
+            "properties": {
+                "data": {},
+                "metadata": {
+                    "$ref": "#/definitions/github_com_sumandas0_k8s-cluster-agent_internal_transport_http_responses.Metadata"
+                }
+            }
+        },
+        "internal_transport_http_handlers.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "k8s_io_api_core_v1.ConditionStatus": {
+            "type": "string",
+            "enum": [
+                "True",
+                "False",
+                "Unknown"
+            ],
+            "x-enum-varnames": [
+                "ConditionTrue",
+                "ConditionFalse",
+                "ConditionUnknown"
+            ]
+        },
+        "resource.Quantity": {
+            "type": "object",
+            "properties": {
+                "Format": {
+                    "type": "string",
+                    "enum": [
+                        "DecimalExponent",
+                        "BinarySI",
+                        "DecimalSI"
+                    ],
+                    "x-enum-comments": {
+                        "BinarySI": "e.g., 12Mi (12 * 2^20)",
+                        "DecimalExponent": "e.g., 12e6",
+                        "DecimalSI": "e.g., 12M  (12 * 10^6)"
+                    },
+                    "x-enum-varnames": [
+                        "DecimalExponent",
+                        "BinarySI",
+                        "DecimalSI"
+                    ]
+                }
+            }
+        },
+        "v1.Affinity": {
+            "type": "object",
+            "properties": {
+                "nodeAffinity": {
+                    "description": "Describes node affinity scheduling rules for the pod.\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.NodeAffinity"
+                        }
+                    ]
+                },
+                "podAffinity": {
+                    "description": "Describes pod affinity scheduling rules (e.g. co-locate this pod in the same node, zone, etc. as some other pod(s)).\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.PodAffinity"
+                        }
+                    ]
+                },
+                "podAntiAffinity": {
+                    "description": "Describes pod anti-affinity scheduling rules (e.g. avoid putting this pod in the same node, zone, etc. as some other pod(s)).\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.PodAntiAffinity"
+                        }
+                    ]
+                }
+            }
+        },
+        "v1.LabelSelector": {
+            "type": "object",
+            "properties": {
+                "matchExpressions": {
+                    "description": "matchExpressions is a list of label selector requirements. The requirements are ANDed.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.LabelSelectorRequirement"
+                    }
+                },
+                "matchLabels": {
+                    "description": "matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels\nmap is equivalent to an element of matchExpressions, whose key field is \"key\", the\noperator is \"In\", and the values array contains only \"value\". The requirements are ANDed.\n+optional",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v1.LabelSelectorOperator": {
+            "type": "string",
+            "enum": [
+                "In",
+                "NotIn",
+                "Exists",
+                "DoesNotExist"
+            ],
+            "x-enum-varnames": [
+                "LabelSelectorOpIn",
+                "LabelSelectorOpNotIn",
+                "LabelSelectorOpExists",
+                "LabelSelectorOpDoesNotExist"
+            ]
+        },
+        "v1.LabelSelectorRequirement": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "description": "key is the label key that the selector applies to.",
+                    "type": "string"
+                },
+                "operator": {
+                    "description": "operator represents a key's relationship to a set of values.\nValid operators are In, NotIn, Exists and DoesNotExist.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.LabelSelectorOperator"
+                        }
+                    ]
+                },
+                "values": {
+                    "description": "values is an array of string values. If the operator is In or NotIn,\nthe values array must be non-empty. If the operator is Exists or DoesNotExist,\nthe values array must be empty. This array is replaced during a strategic\nmerge patch.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v1.NodeAffinity": {
+            "type": "object",
+            "properties": {
+                "preferredDuringSchedulingIgnoredDuringExecution": {
+                    "description": "The scheduler will prefer to schedule pods to nodes that satisfy\nthe affinity expressions specified by this field, but it may choose\na node that violates one or more of the expressions. The node that is\nmost preferred is the one with the greatest sum of weights, i.e.\nfor each node that meets all of the scheduling requirements (resource\nrequest, requiredDuringScheduling affinity expressions, etc.),\ncompute a sum by iterating through the elements of this field and adding\n\"weight\" to the sum if the node matches the corresponding matchExpressions; the\nnode(s) with the highest sum are the most preferred.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.PreferredSchedulingTerm"
+                    }
+                },
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "description": "If the affinity requirements specified by this field are not met at\nscheduling time, the pod will not be scheduled onto the node.\nIf the affinity requirements specified by this field cease to be met\nat some point during pod execution (e.g. due to an update), the system\nmay or may not try to eventually evict the pod from its node.\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.NodeSelector"
+                        }
+                    ]
+                }
+            }
+        },
+        "v1.NodeSelector": {
+            "type": "object",
+            "properties": {
+                "nodeSelectorTerms": {
+                    "description": "Required. A list of node selector terms. The terms are ORed.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.NodeSelectorTerm"
+                    }
+                }
+            }
+        },
+        "v1.NodeSelectorOperator": {
+            "type": "string",
+            "enum": [
+                "In",
+                "NotIn",
+                "Exists",
+                "DoesNotExist",
+                "Gt",
+                "Lt"
+            ],
+            "x-enum-varnames": [
+                "NodeSelectorOpIn",
+                "NodeSelectorOpNotIn",
+                "NodeSelectorOpExists",
+                "NodeSelectorOpDoesNotExist",
+                "NodeSelectorOpGt",
+                "NodeSelectorOpLt"
+            ]
+        },
+        "v1.NodeSelectorRequirement": {
+            "type": "object",
+            "properties": {
+                "key": {
+                    "description": "The label key that the selector applies to.",
+                    "type": "string"
+                },
+                "operator": {
+                    "description": "Represents a key's relationship to a set of values.\nValid operators are In, NotIn, Exists, DoesNotExist. Gt, and Lt.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.NodeSelectorOperator"
+                        }
+                    ]
+                },
+                "values": {
+                    "description": "An array of string values. If the operator is In or NotIn,\nthe values array must be non-empty. If the operator is Exists or DoesNotExist,\nthe values array must be empty. If the operator is Gt or Lt, the values\narray must have a single element, which will be interpreted as an integer.\nThis array is replaced during a strategic merge patch.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v1.NodeSelectorTerm": {
+            "type": "object",
+            "properties": {
+                "matchExpressions": {
+                    "description": "A list of node selector requirements by node's labels.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.NodeSelectorRequirement"
+                    }
+                },
+                "matchFields": {
+                    "description": "A list of node selector requirements by node's fields.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.NodeSelectorRequirement"
+                    }
+                }
+            }
+        },
+        "v1.PodAffinity": {
+            "type": "object",
+            "properties": {
+                "preferredDuringSchedulingIgnoredDuringExecution": {
+                    "description": "The scheduler will prefer to schedule pods to nodes that satisfy\nthe affinity expressions specified by this field, but it may choose\na node that violates one or more of the expressions. The node that is\nmost preferred is the one with the greatest sum of weights, i.e.\nfor each node that meets all of the scheduling requirements (resource\nrequest, requiredDuringScheduling affinity expressions, etc.),\ncompute a sum by iterating through the elements of this field and adding\n\"weight\" to the sum if the node has pods which matches the corresponding podAffinityTerm; the\nnode(s) with the highest sum are the most preferred.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.WeightedPodAffinityTerm"
+                    }
+                },
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "description": "If the affinity requirements specified by this field are not met at\nscheduling time, the pod will not be scheduled onto the node.\nIf the affinity requirements specified by this field cease to be met\nat some point during pod execution (e.g. due to a pod label update), the\nsystem may or may not try to eventually evict the pod from its node.\nWhen there are multiple elements, the lists of nodes corresponding to each\npodAffinityTerm are intersected, i.e. all terms must be satisfied.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.PodAffinityTerm"
+                    }
+                }
+            }
+        },
+        "v1.PodAffinityTerm": {
+            "type": "object",
+            "properties": {
+                "labelSelector": {
+                    "description": "A label query over a set of resources, in this case pods.\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.LabelSelector"
+                        }
+                    ]
+                },
+                "namespaceSelector": {
+                    "description": "A label query over the set of namespaces that the term applies to.\nThe term is applied to the union of the namespaces selected by this field\nand the ones listed in the namespaces field.\nnull selector and null or empty namespaces list means \"this pod's namespace\".\nAn empty selector ({}) matches all namespaces.\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.LabelSelector"
+                        }
+                    ]
+                },
+                "namespaces": {
+                    "description": "namespaces specifies a static list of namespace names that the term applies to.\nThe term is applied to the union of the namespaces listed in this field\nand the ones selected by namespaceSelector.\nnull or empty namespaces list and null namespaceSelector means \"this pod's namespace\".\n+optional",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "topologyKey": {
+                    "description": "This pod should be co-located (affinity) or not co-located (anti-affinity) with the pods matching\nthe labelSelector in the specified namespaces, where co-located is defined as running on a node\nwhose value of the label with key topologyKey matches that of any node on which any of the\nselected pods is running.\nEmpty topologyKey is not allowed.",
+                    "type": "string"
+                }
+            }
+        },
+        "v1.PodAntiAffinity": {
+            "type": "object",
+            "properties": {
+                "preferredDuringSchedulingIgnoredDuringExecution": {
+                    "description": "The scheduler will prefer to schedule pods to nodes that satisfy\nthe anti-affinity expressions specified by this field, but it may choose\na node that violates one or more of the expressions. The node that is\nmost preferred is the one with the greatest sum of weights, i.e.\nfor each node that meets all of the scheduling requirements (resource\nrequest, requiredDuringScheduling anti-affinity expressions, etc.),\ncompute a sum by iterating through the elements of this field and adding\n\"weight\" to the sum if the node has pods which matches the corresponding podAffinityTerm; the\nnode(s) with the highest sum are the most preferred.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.WeightedPodAffinityTerm"
+                    }
+                },
+                "requiredDuringSchedulingIgnoredDuringExecution": {
+                    "description": "If the anti-affinity requirements specified by this field are not met at\nscheduling time, the pod will not be scheduled onto the node.\nIf the anti-affinity requirements specified by this field cease to be met\nat some point during pod execution (e.g. due to a pod label update), the\nsystem may or may not try to eventually evict the pod from its node.\nWhen there are multiple elements, the lists of nodes corresponding to each\npodAffinityTerm are intersected, i.e. all terms must be satisfied.\n+optional",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.PodAffinityTerm"
+                    }
+                }
+            }
+        },
+        "v1.PodCondition": {
+            "type": "object",
+            "properties": {
+                "lastProbeTime": {
+                    "description": "Last time we probed the condition.\n+optional",
+                    "type": "string"
+                },
+                "lastTransitionTime": {
+                    "description": "Last time the condition transitioned from one status to another.\n+optional",
+                    "type": "string"
+                },
+                "message": {
+                    "description": "Human-readable message indicating details about last transition.\n+optional",
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Unique, one-word, CamelCase reason for the condition's last transition.\n+optional",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status is the status of the condition.\nCan be True, False, Unknown.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/k8s_io_api_core_v1.ConditionStatus"
+                        }
+                    ]
+                },
+                "type": {
+                    "description": "Type is the type of the condition.\nMore info: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle#pod-conditions",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.PodConditionType"
+                        }
+                    ]
+                }
+            }
+        },
+        "v1.PodConditionType": {
+            "type": "string",
+            "enum": [
+                "ContainersReady",
+                "Initialized",
+                "Ready",
+                "PodScheduled",
+                "DisruptionTarget"
+            ],
+            "x-enum-varnames": [
+                "ContainersReady",
+                "PodInitialized",
+                "PodReady",
+                "PodScheduled",
+                "DisruptionTarget"
+            ]
+        },
+        "v1.PreferredSchedulingTerm": {
+            "type": "object",
+            "properties": {
+                "preference": {
+                    "description": "A node selector term, associated with the corresponding weight.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.NodeSelectorTerm"
+                        }
+                    ]
+                },
+                "weight": {
+                    "description": "Weight associated with matching the corresponding nodeSelectorTerm, in the range 1-100.",
+                    "type": "integer"
+                }
+            }
+        },
+        "v1.ResourceList": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/definitions/resource.Quantity"
+            }
+        },
+        "v1.TaintEffect": {
+            "type": "string",
+            "enum": [
+                "NoSchedule",
+                "PreferNoSchedule",
+                "NoExecute"
+            ],
+            "x-enum-varnames": [
+                "TaintEffectNoSchedule",
+                "TaintEffectPreferNoSchedule",
+                "TaintEffectNoExecute"
+            ]
+        },
+        "v1.Toleration": {
+            "type": "object",
+            "properties": {
+                "effect": {
+                    "description": "Effect indicates the taint effect to match. Empty means match all taint effects.\nWhen specified, allowed values are NoSchedule, PreferNoSchedule and NoExecute.\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.TaintEffect"
+                        }
+                    ]
+                },
+                "key": {
+                    "description": "Key is the taint key that the toleration applies to. Empty means match all taint keys.\nIf the key is empty, operator must be Exists; this combination means to match all values and all keys.\n+optional",
+                    "type": "string"
+                },
+                "operator": {
+                    "description": "Operator represents a key's relationship to the value.\nValid operators are Exists and Equal. Defaults to Equal.\nExists is equivalent to wildcard for value, so that a pod can\ntolerate all taints of a particular category.\n+optional",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.TolerationOperator"
+                        }
+                    ]
+                },
+                "tolerationSeconds": {
+                    "description": "TolerationSeconds represents the period of time the toleration (which must be\nof effect NoExecute, otherwise this field is ignored) tolerates the taint. By default,\nit is not set, which means tolerate the taint forever (do not evict). Zero and\nnegative values will be treated as 0 (evict immediately) by the system.\n+optional",
+                    "type": "integer"
+                },
+                "value": {
+                    "description": "Value is the taint value the toleration matches to.\nIf the operator is Exists, the value should be empty, otherwise just a regular string.\n+optional",
+                    "type": "string"
+                }
+            }
+        },
+        "v1.TolerationOperator": {
+            "type": "string",
+            "enum": [
+                "Exists",
+                "Equal"
+            ],
+            "x-enum-varnames": [
+                "TolerationOpExists",
+                "TolerationOpEqual"
+            ]
+        },
+        "v1.WeightedPodAffinityTerm": {
+            "type": "object",
+            "properties": {
+                "podAffinityTerm": {
+                    "description": "Required. A pod affinity term, associated with the corresponding weight.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v1.PodAffinityTerm"
+                        }
+                    ]
+                },
+                "weight": {
+                    "description": "weight associated with matching the corresponding podAffinityTerm,\nin the range 1-100.",
+                    "type": "integer"
+                }
+            }
+        }
+    },
+    "tags": [
+        {
+            "description": "Pod-related operations for querying pod status, scheduling, resources, and health",
+            "name": "Pods"
+        },
+        {
+            "description": "Node-related operations for querying node utilization and metrics",
+            "name": "Nodes"
+        },
+        {
+            "description": "Cluster-wide operations for analyzing pod issues across namespaces",
+            "name": "Cluster"
+        },
+        {
+            "description": "Namespace-specific operations for error analysis",
+            "name": "Namespace"
+        },
+        {
+            "description": "Health check endpoints for monitoring service availability",
+            "name": "Health"
+        }
+    ]
+}

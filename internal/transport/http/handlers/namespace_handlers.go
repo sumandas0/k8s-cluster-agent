@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/sumandas0/k8s-cluster-agent/internal/core"
+	_ "github.com/sumandas0/k8s-cluster-agent/internal/core/models"
 	"github.com/sumandas0/k8s-cluster-agent/internal/transport/http/responses"
 )
 
@@ -24,6 +25,17 @@ func NewNamespaceHandlers(namespaceService core.NamespaceService, logger *slog.L
 	}
 }
 
+// GetNamespaceErrors returns an error analysis report for all pods in a namespace
+// @Summary Get namespace error analysis
+// @Description Returns a comprehensive error analysis report for all pods in the specified namespace
+// @Tags Namespace
+// @Accept json
+// @Produce json
+// @Param namespace path string true "Namespace name"
+// @Success 200 {object} responses.SuccessResponse{data=models.NamespaceErrorReport} "Namespace error analysis report"
+// @Failure 400 {object} responses.ErrorResponse "Bad request - invalid parameters"
+// @Failure 500 {object} responses.ErrorResponse "Internal server error"
+// @Router /namespace/{namespace}/error [get]
 func (h *NamespaceHandlers) GetNamespaceErrors(w http.ResponseWriter, r *http.Request) {
 	namespace := chi.URLParam(r, "namespace")
 	requestID := middleware.GetReqID(r.Context())
