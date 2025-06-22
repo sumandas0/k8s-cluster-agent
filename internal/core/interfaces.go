@@ -30,8 +30,18 @@ type NamespaceService interface {
 	GetNamespaceErrors(ctx context.Context, namespace string) (*models.NamespaceErrorReport, error)
 }
 
+type HealthScoreService interface {
+	CalculateHealthScore(ctx context.Context, namespace, podName string) (*models.PodHealthScore, error)
+}
+
+type ClusterIssuesService interface {
+	GetClusterIssues(ctx context.Context, namespace string, severityFilter string) (*models.ClusterIssues, error)
+}
+
 type Services struct {
-	Pod       PodService
-	Node      NodeService
-	Namespace NamespaceService
+	Pod           PodService
+	Node          NodeService
+	Namespace     NamespaceService
+	HealthScore   HealthScoreService
+	ClusterIssues ClusterIssuesService
 }

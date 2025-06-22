@@ -5,27 +5,22 @@ metadata:
   labels:
     app: k8s-cluster-agent
 rules:
-  # Pod permissions - read-only access to pods in all namespaces
   - apiGroups: [""]
     resources: ["pods"]
     verbs: ["get", "list"]
   
-  # Node permissions - read-only access to nodes
   - apiGroups: [""]
     resources: ["nodes"]
     verbs: ["get"]
   
-  # Event permissions - read-only access to events for pod descriptions
   - apiGroups: [""]
     resources: ["events"]
     verbs: ["get", "list"]
   
-  # Metrics permissions - read-only access to node metrics
   - apiGroups: ["metrics.k8s.io"]
     resources: ["nodes"]
     verbs: ["get"]
   
-  # Deployment and StatefulSet permissions - read-only access for owner reference checks
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets"]
     verbs: ["get", "list"] 

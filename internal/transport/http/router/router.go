@@ -24,6 +24,8 @@ func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
 	podHandlers := handlers.NewPodHandlers(services.Pod, logger)
 	nodeHandlers := handlers.NewNodeHandlers(services.Node, logger)
 	namespaceHandlers := handlers.NewNamespaceHandlers(services.Namespace, logger)
+	healthScoreHandler := handlers.NewHealthScoreHandler(services.HealthScore, logger)
+	clusterIssuesHandler := handlers.NewClusterIssuesHandler(services.ClusterIssues, logger)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/pods/{namespace}/{podName}", func(r chi.Router) {
@@ -32,11 +34,14 @@ func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
 			r.Get("/resources", podHandlers.GetPodResources)
 			r.Get("/failure-events", podHandlers.GetPodFailureEvents)
 			r.Get("/scheduling/explain", podHandlers.GetPodSchedulingExplanation)
+			r.Get("/health-score", healthScoreHandler.GetPodHealthScore)
 		})
 
 		r.Get("/nodes/{nodeName}/utilization", nodeHandlers.GetNodeUtilization)
 
 		r.Get("/namespace/{namespace}/error", namespaceHandlers.GetNamespaceErrors)
+
+		r.Get("/cluster/pod-issues", clusterIssuesHandler.GetClusterIssues)
 	})
 
 	r.Get("/healthz", handlers.HandleHealth)

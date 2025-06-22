@@ -11,8 +11,10 @@ import (
 
 func NewServices(clients *kubernetes.Clients, cfg *config.Config, logger *slog.Logger) *core.Services {
 	return &core.Services{
-		Pod:       services.NewPodService(clients.Kubernetes, logger),
-		Node:      services.NewNodeService(clients.Kubernetes, clients.Metrics, logger),
-		Namespace: services.NewNamespaceService(clients.Kubernetes, cfg, logger),
+		Pod:           services.NewPodService(clients.Kubernetes, logger),
+		Node:          services.NewNodeService(clients.Kubernetes, clients.Metrics, logger),
+		Namespace:     services.NewNamespaceService(clients.Kubernetes, cfg, logger),
+		HealthScore:   kubernetes.NewHealthScoreService(clients.Kubernetes, logger),
+		ClusterIssues: kubernetes.NewClusterIssuesService(clients.Kubernetes, logger),
 	}
 }

@@ -7,6 +7,8 @@ A lightweight in-cluster Kubernetes agent that provides read-only access to pod 
 - **Pod Information**: Get detailed pod information including scheduling details and resource requirements
 - **Enhanced Scheduling Analysis**: Comprehensive scheduling failure analysis for pending pods with per-node breakdown
 - **Failure Event Analysis**: Intelligent analysis of pod failure events with categorization and actionable insights
+- **Pod Health Score**: Calculate comprehensive health scores for pods with component-based analysis
+- **Cluster-Wide Issues Dashboard**: Real-time aggregated view of all pod problems with pattern detection
 - **Namespace Error Analysis**: Analyze all pods in a namespace for common issues (restarts, pending, crashes)
 - **Node Utilization**: Retrieve real-time node resource utilization metrics
 - **Secure by Default**: Minimal RBAC permissions, read-only access
@@ -442,6 +444,244 @@ curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/de
 - **Recurrence Analysis**: Tracks event frequency and calculates recurrence rates
 - **Actionable Insights**: Provides possible causes and suggested actions for each failure type
 - **Ongoing Issues**: Highlights problems that occurred in the last 5 minutes
+
+#### Get Pod Health Score
+```http
+GET /api/v1/pods/{namespace}/{podName}/health-score
+```
+
+Returns a comprehensive health score for a pod based on multiple factors.
+
+**Example:**
+```bash
+curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/pods/default/my-pod/health-score
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "podName": "my-pod",
+    "namespace": "default",
+    "overallScore": 85,
+    "status": "Good",
+    "components": {
+      "restarts": {
+        "name": "Container Restarts",
+        "score": 70,
+        "weight": 0.30,
+        "status": "Good",
+        "description": "5 total restarts"
+      },
+      "containerStates": {
+        "name": "Container States",
+        "score": 100,
+        "weight": 0.25,
+        "status": "Excellent",
+        "description": "2/2 containers healthy"
+      },
+      "events": {
+        "name": "Recent Events",
+        "score": 85,
+        "weight": 0.20,
+        "status": "Good",
+        "description": "2 warning events in last 24h"
+      },
+      "conditions": {
+        "name": "Pod Conditions",
+        "score": 100,
+        "weight": 0.15,
+        "status": "Excellent",
+        "description": "4/4 conditions healthy"
+      },
+      "uptime": {
+        "name": "Uptime/Stability",
+        "score": 85,
+        "weight": 0.10,
+        "status": "Good",
+        "description": "Pod age: 2d 3h 45m"
+      }
+    },
+    "calculatedAt": "2023-06-21T10:30:00Z",
+    "details": {
+      "restartCount": 5,
+      "restartFrequency": "0.10 restarts/hour",
+      "uptime": "2d 3h 45m",
+      "lastRestartTime": "2023-06-20T08:15:00Z",
+      "lastRestartReason": "OOMKilled",
+      "containerStatuses": [
+        {
+          "name": "app",
+          "state": "Running",
+          "ready": true,
+          "restartCount": 5
+        }
+      ],
+      "recentEvents": [
+        {
+          "type": "Warning",
+          "reason": "OOMKilled",
+          "message": "Container app was killed due to memory limit",
+          "count": 2,
+          "lastSeen": "2023-06-20T08:15:00Z"
+        }
+      ],
+      "podConditions": [
+        {
+          "type": "Ready",
+          "status": "True"
+        }
+      ]
+    }
+  },
+  "metadata": {
+    "requestId": "123e4567-e89b-12d3-a456-426614174000",
+    "timestamp": "2023-06-21T10:30:00Z"
+  }
+}
+```
+
+**Features:**
+- **Overall Score**: Composite score from 0-100 indicating pod health
+- **Component Scoring**: Individual scores for different health aspects:
+  - Container Restarts (30% weight): Penalty for high restart counts
+  - Container States (25% weight): Current container health status
+  - Recent Events (20% weight): Warning/error events in last 24 hours
+  - Pod Conditions (15% weight): Pod readiness and other conditions
+  - Uptime/Stability (10% weight): Container uptime vs pod age ratio
+- **Health Status**: Categorized as Healthy (90+), Good (70-89), Warning (50-69), Degraded (30-49), Critical (<30)
+- **Detailed Metrics**: Restart frequency, uptime, last restart reason, and more
+
+#### Get Cluster-Wide Pod Issues
+```http
+GET /api/v1/cluster/pod-issues?namespace={namespace}&severity={severity}
+```
+
+Returns a real-time aggregated view of pod problems across the cluster.
+
+**Query Parameters:**
+- `namespace` (optional): Filter by specific namespace (default: all namespaces)
+- `severity` (optional): Filter by severity level (critical, warning, info)
+
+**Example:**
+```bash
+curl http://k8s-cluster-agent.k8s-cluster-agent.svc.cluster.local/api/v1/cluster/pod-issues?severity=critical
+```
+
+**Response:**
+```json
+{
+  "data": {
+    "totalPods": 250,
+    "healthyPods": 210,
+    "unhealthyPods": 40,
+    "issueCategories": {
+      "CrashLoopBackOff": 10,
+      "ImagePullError": 5,
+      "PendingScheduling": 8,
+      "OOMKilled": 3,
+      "Unhealthy": 14
+    },
+    "issuesByNamespace": {
+      "default": {
+        "namespace": "default",
+        "totalPods": 50,
+        "issuesCount": 15,
+        "criticalCount": 8,
+        "warningCount": 7,
+        "topIssues": [
+          {
+            "podName": "app-xyz",
+            "category": "CrashLoopBackOff",
+            "severity": "critical",
+            "reason": "CrashLoopBackOff",
+            "message": "Back-off restarting failed container",
+            "lastSeen": "2023-06-21T10:25:00Z",
+            "isRecurring": true
+          }
+        ]
+      }
+    },
+    "topIssues": [
+      {
+        "category": "CrashLoopBackOff",
+        "count": 10,
+        "severity": "critical",
+        "description": "Container repeatedly crashing and restarting",
+        "affectedPods": ["default/app-1", "default/app-2", "prod/service-1", "...and 7 more"]
+      },
+      {
+        "category": "Unhealthy",
+        "count": 14,
+        "severity": "warning",
+        "description": "Pod health checks failing",
+        "affectedPods": ["default/web-1", "staging/api-2", "...and 12 more"]
+      }
+    ],
+    "issueVelocity": {
+      "newIssuesLastHour": 5,
+      "newIssuesLast24h": 32,
+      "resolvedLastHour": 2,
+      "resolvedLast24h": 25,
+      "trendDirection": "degrading",
+      "velocityPerHour": 1.33
+    },
+    "patterns": [
+      {
+        "type": "ImagePullError",
+        "description": "ImagePullError: ErrImagePull",
+        "count": 5,
+        "namespaces": ["default", "staging"],
+        "commonLabels": {
+          "app": "frontend",
+          "version": "v2.0"
+        },
+        "firstSeen": "2023-06-21T09:00:00Z",
+        "lastSeen": "2023-06-21T10:25:00Z"
+      }
+    ],
+    "criticalIssues": [
+      {
+        "podName": "database-primary",
+        "namespace": "production",
+        "category": "OOMKilled",
+        "severity": "critical",
+        "reason": "OOMKilled",
+        "message": "Container killed due to Out Of Memory",
+        "lastSeen": "2023-06-21T10:20:00Z"
+      }
+    ],
+    "calculatedAt": "2023-06-21T10:30:00Z"
+  },
+  "metadata": {
+    "requestId": "123e4567-e89b-12d3-a456-426614174000",
+    "timestamp": "2023-06-21T10:30:00Z"
+  }
+}
+```
+
+**Features:**
+- **Cluster Overview**: Total pod counts and health distribution
+- **Issue Categorization**: Groups problems by type (CrashLoopBackOff, ImagePullError, etc.)
+- **Namespace Breakdown**: Per-namespace issue analysis
+- **Issue Velocity**: Tracks new vs resolved issues with trend analysis
+- **Pattern Detection**: Identifies common patterns across multiple pods
+- **Critical Issues List**: Highlights the most severe current problems
+- **Common Labels**: Shows shared labels among pods with similar issues
+
+**Issue Categories:**
+- `CrashLoopBackOff`: Container repeatedly crashing
+- `ImagePullError`: Image pull failures
+- `PendingScheduling`: Pods unable to be scheduled
+- `OOMKilled`: Out of memory terminations
+- `Evicted`: Pods evicted from nodes
+- `Failed`: Pods in failed state
+- `Unhealthy`: Health check failures
+- `InitContainerError`: Init container failures
+- `VolumeMountError`: Volume mounting issues
+- `ConfigurationError`: Config/secret mounting errors
+- `NetworkError`: Network connectivity issues
+- `ResourceQuotaExceeded`: Resource quota violations
 
 #### Get Namespace Error Analysis
 ```http

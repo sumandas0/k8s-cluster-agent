@@ -59,7 +59,9 @@ make tidy             # Clean up go.mod dependencies
 - `GET /api/v1/pods/{namespace}/{podName}/resources` - Resource requirements
 - `GET /api/v1/pods/{namespace}/{podName}/failure-events` - Analyzed failure events with insights
 - `GET /api/v1/pods/{namespace}/{podName}/scheduling/explain` - Detailed scheduling explanation (like Elasticsearch's allocation explain)
+- `GET /api/v1/pods/{namespace}/{podName}/health-score` - Pod health score with detailed component analysis
 - `GET /api/v1/nodes/{nodeName}/utilization` - Node metrics (requires metrics server)
+- `GET /api/v1/cluster/pod-issues` - Cluster-wide pod issues dashboard with pattern detection
 
 #### Enhanced Scheduling API
 The `/scheduling` endpoint provides comprehensive scheduling analysis:
@@ -206,6 +208,101 @@ Example response structure:
   "criticalEvents": 2,
   "warningEvents": 0,
   "ongoingIssues": ["CrashLoopBackOff: Back-off restarting failed container"]
+}
+```
+
+#### Pod Health Score API
+The `/health-score` endpoint provides a comprehensive health assessment for pods:
+
+**Features:**
+- Calculates overall health score (0-100) based on multiple factors
+- Component-based scoring with weighted contributions:
+  - Container restarts (30% weight)
+  - Container states (25% weight)
+  - Recent events (20% weight)
+  - Pod conditions (15% weight)
+  - Uptime/stability (10% weight)
+- Provides detailed health metrics including restart frequency and uptime
+- Categorizes health status: Healthy, Good, Warning, Degraded, Critical
+
+Example response structure:
+```json
+{
+  "podName": "my-pod",
+  "namespace": "default",
+  "overallScore": 75,
+  "status": "Good",
+  "components": {
+    "restarts": {
+      "name": "Container Restarts",
+      "score": 70,
+      "weight": 0.30,
+      "status": "Good",
+      "description": "5 total restarts"
+    },
+    "containerStates": {
+      "name": "Container States",
+      "score": 100,
+      "weight": 0.25,
+      "status": "Excellent",
+      "description": "2/2 containers healthy"
+    }
+  },
+  "details": {
+    "restartCount": 5,
+    "restartFrequency": "0.42 restarts/hour",
+    "uptime": "12h 30m",
+    "containerStatuses": [...],
+    "recentEvents": [...]
+  }
+}
+```
+
+#### Cluster-Wide Pod Issues Dashboard API
+The `/cluster/pod-issues` endpoint provides a real-time aggregated view of pod problems:
+
+**Features:**
+- Aggregates pod issues across all namespaces or filtered by namespace
+- Categorizes issues: CrashLoopBackOff, ImagePullError, Pending, OOMKilled, etc.
+- Tracks issue velocity and trends (improving/stable/degrading)
+- Detects patterns across multiple pods
+- Provides namespace-level breakdown
+- Supports severity filtering
+
+Example response structure:
+```json
+{
+  "totalPods": 150,
+  "healthyPods": 120,
+  "unhealthyPods": 30,
+  "issueCategories": {
+    "CrashLoopBackOff": 5,
+    "ImagePullError": 3,
+    "PendingScheduling": 2
+  },
+  "topIssues": [
+    {
+      "category": "CrashLoopBackOff",
+      "count": 5,
+      "severity": "critical",
+      "description": "Container repeatedly crashing and restarting",
+      "affectedPods": ["default/app-1", "default/app-2", "..."]
+    }
+  ],
+  "issueVelocity": {
+    "newIssuesLastHour": 3,
+    "trendDirection": "degrading",
+    "velocityPerHour": 2.5
+  },
+  "patterns": [
+    {
+      "type": "ImagePullError",
+      "description": "ImagePullError: ErrImagePull",
+      "count": 3,
+      "namespaces": ["default", "production"],
+      "commonLabels": {"app": "frontend"}
+    }
+  ]
 }
 ```
 
