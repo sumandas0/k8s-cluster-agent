@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math"
+	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -873,6 +876,7 @@ func (s *podService) analyzeUnschedulableNodes(ctx context.Context, pod *v1.Pod)
 func (s *podService) categorizeSchedulingFailure(reasons []string, events []models.SchedulingEvent) []models.SchedulingFailureCategory {
 	categories := make(map[models.SchedulingFailureCategory]bool)
 
+	// First process simple reasons from node analysis
 	for _, reason := range reasons {
 		reasonLower := strings.ToLower(reason)
 
@@ -903,6 +907,24 @@ func (s *podService) categorizeSchedulingFailure(reasons []string, events []mode
 		}
 	}
 
+	// Parse events for more detailed categorization
+	for _, event := range events {
+		if event.Reason == "FailedScheduling" {
+			// Parse detailed FailedScheduling messages
+			parsedCategories := s.parseFailedSchedulingMessage(event.Message)
+			for cat := range parsedCategories {
+				categories[cat] = true
+			}
+		} else if event.Reason == "NotTriggerScaleUp" {
+			// Parse cluster-autoscaler messages
+			parsedCategories := s.parseNotTriggerScaleUpMessage(event.Message)
+			for cat := range parsedCategories {
+				categories[cat] = true
+			}
+		}
+	}
+
+	// Also check for volume issues in events
 	volumeCategories := s.parseEventsForVolumeIssues(events)
 	for cat := range volumeCategories {
 		categories[cat] = true
@@ -913,7 +935,7 @@ func (s *podService) categorizeSchedulingFailure(reasons []string, events []mode
 		result = append(result, cat)
 	}
 
-	if len(result) == 0 && len(reasons) > 0 {
+	if len(result) == 0 && (len(reasons) > 0 || len(events) > 0) {
 		result = append(result, models.FailureCategoryMiscellaneous)
 	}
 
@@ -1353,4 +1375,879 @@ func (s *podService) severityWeight(severity string) int {
 	default:
 		return 0
 	}
+}
+
+func (s *podService) parseFailedSchedulingMessage(message string) map[models.SchedulingFailureCategory]int {
+	categories := make(map[models.SchedulingFailureCategory]int)
+
+	// Parse messages like "0/46 nodes are available: 1 Insufficient memory, 1 node(s) had untolerated taint..."
+	// First check if it's a standard FailedScheduling message
+	if !strings.Contains(message, "nodes are available:") {
+		return categories
+	}
+
+	// Split by the colon to get the reasons part
+	parts := strings.SplitN(message, ":", 2)
+	if len(parts) < 2 {
+		return categories
+	}
+
+	// Parse each reason in the comma-separated list
+	reasons := strings.Split(parts[1], ",")
+	for _, reason := range reasons {
+		reason = strings.TrimSpace(reason)
+		reasonLower := strings.ToLower(reason)
+
+		// Extract count if present (e.g., "1 Insufficient memory" -> count=1)
+		count := 1
+		if matches := regexp.MustCompile(`^(\d+)\s+`).FindStringSubmatch(reason); len(matches) > 1 {
+			if n, err := strconv.Atoi(matches[1]); err == nil {
+				count = n
+			}
+		}
+
+		// Categorize based on the reason text
+		switch {
+		case strings.Contains(reasonLower, "insufficient cpu"):
+			categories[models.FailureCategoryResourceCPU] += count
+		case strings.Contains(reasonLower, "insufficient memory"):
+			categories[models.FailureCategoryResourceMemory] += count
+		case strings.Contains(reasonLower, "insufficient storage") ||
+			strings.Contains(reasonLower, "insufficient ephemeral-storage"):
+			categories[models.FailureCategoryResourceStorage] += count
+		case strings.Contains(reasonLower, "node(s) didn't match pod's node affinity/selector") ||
+			strings.Contains(reasonLower, "node(s) didn't match node selector") ||
+			strings.Contains(reasonLower, "node(s) didn't match pod's node affinity"):
+			categories[models.FailureCategoryNodeAffinity] += count
+		case strings.Contains(reasonLower, "node(s) had untolerated taint") ||
+			strings.Contains(reasonLower, "node(s) had taint"):
+			categories[models.FailureCategoryTaints] += count
+		case strings.Contains(reasonLower, "node(s) had volume node affinity conflict"):
+			categories[models.FailureCategoryVolumeNodeAffinity] += count
+		case strings.Contains(reasonLower, "node(s) didn't match pod affinity") ||
+			strings.Contains(reasonLower, "node(s) didn't match pod anti-affinity"):
+			categories[models.FailureCategoryPodAffinity] += count
+		case strings.Contains(reasonLower, "no preemption victims found"):
+			// This is informational, not a direct failure category
+			continue
+		case strings.Contains(reasonLower, "preemption is not helpful"):
+			// This is informational, not a direct failure category
+			continue
+		}
+	}
+
+	return categories
+}
+
+func (s *podService) parseNotTriggerScaleUpMessage(message string) map[models.SchedulingFailureCategory]int {
+	categories := make(map[models.SchedulingFailureCategory]int)
+	msgLower := strings.ToLower(message)
+
+	// Parse cluster-autoscaler NotTriggerScaleUp messages
+	// Examples:
+	// "pod didn't trigger scale-up: 1 max node group size reached, 1 node(s) didn't match Pod's node affinity/selector"
+	// "pod didn't trigger scale-up: 1 node(s) didn't match Pod's node affinity/selector, 1 max node group size reached"
+
+	if strings.Contains(msgLower, "max node group size reached") {
+		// Extract count if present
+		re := regexp.MustCompile(`(\d+)\s+max node group size reached`)
+		if matches := re.FindStringSubmatch(msgLower); len(matches) > 1 {
+			if n, err := strconv.Atoi(matches[1]); err == nil {
+				categories[models.FailureCategoryMiscellaneous] += n
+			}
+		} else {
+			categories[models.FailureCategoryMiscellaneous]++
+		}
+	}
+
+	if strings.Contains(msgLower, "node(s) didn't match pod's node affinity/selector") ||
+		strings.Contains(msgLower, "node(s) didn't match node selector") {
+		// Extract count if present
+		re := regexp.MustCompile(`(\d+)\s+node\(s\) didn't match`)
+		if matches := re.FindStringSubmatch(msgLower); len(matches) > 1 {
+			if n, err := strconv.Atoi(matches[1]); err == nil {
+				categories[models.FailureCategoryNodeAffinity] += n
+			}
+		} else {
+			categories[models.FailureCategoryNodeAffinity]++
+		}
+	}
+
+	return categories
+}
+
+func (s *podService) GetPodSchedulingExplanation(ctx context.Context, namespace, name string) (*models.SchedulingExplanation, error) {
+	s.logger.Debug("getting pod scheduling explanation", "namespace", namespace, "pod", name)
+
+	pod, err := s.GetPod(ctx, namespace, name)
+	if err != nil {
+		return nil, err
+	}
+
+	events, err := s.getSchedulingEvents(ctx, namespace, name)
+	if err != nil {
+		s.logger.Warn("failed to get scheduling events for explanation",
+			"namespace", namespace,
+			"pod", name,
+			"error", err.Error())
+		events = []models.SchedulingEvent{}
+	}
+
+	nodeList, err := s.k8sClient.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list nodes: %w", err)
+	}
+
+	nodeAnalysis := make([]models.NodeSchedulingExplanation, 0, len(nodeList.Items))
+	summary := models.SchedulingSummary{
+		TotalNodes: len(nodeList.Items),
+	}
+
+	for i := range nodeList.Items {
+		node := &nodeList.Items[i]
+		analysis := s.analyzeNodeForSchedulingExplanation(ctx, pod, node, &summary)
+		nodeAnalysis = append(nodeAnalysis, analysis)
+	}
+
+	status := "Scheduled"
+	if pod.Spec.NodeName == "" {
+		status = "Pending"
+	}
+
+	summary.Recommendation = s.generateSchedulingRecommendation(pod, nodeAnalysis, events)
+	summary.PossibleActions = s.generatePossibleActions(pod, nodeAnalysis, events)
+
+	explanation := &models.SchedulingExplanation{
+		PodName:      name,
+		Namespace:    namespace,
+		Status:       status,
+		NodeName:     pod.Spec.NodeName,
+		NodeAnalysis: nodeAnalysis,
+		Summary:      summary,
+		Events:       events,
+	}
+
+	s.logger.Debug("successfully generated pod scheduling explanation",
+		"namespace", namespace,
+		"pod", name,
+		"nodes_analyzed", len(nodeAnalysis))
+
+	return explanation, nil
+}
+
+func (s *podService) analyzeNodeForSchedulingExplanation(ctx context.Context, pod *v1.Pod, node *v1.Node, summary *models.SchedulingSummary) models.NodeSchedulingExplanation {
+	reasons := models.NodeSchedulingReasons{}
+	schedulable := true
+	recommendations := []string{}
+
+	// Check node readiness
+	nodeReady, readyExplanation := s.explainNodeReady(node)
+	if !nodeReady {
+		schedulable = false
+		reasons.NodeReady = readyExplanation
+		summary.FilteredByNodeNotReady++
+		recommendations = append(recommendations, "Node is not ready for scheduling")
+	}
+
+	// Check resource fit
+	resourceFit, resourceExplanation := s.explainResourceFit(ctx, pod, node)
+	if !resourceFit {
+		schedulable = false
+		reasons.Resources = resourceExplanation
+		summary.FilteredByResources++
+	}
+
+	// Check node selector and affinity
+	affinityMatch, affinityExplanation := s.explainAffinity(pod, node)
+	if !affinityMatch {
+		schedulable = false
+		reasons.Affinity = affinityExplanation
+		if affinityExplanation.NodeSelector != nil && !affinityExplanation.NodeSelector.Matched {
+			summary.FilteredByNodeSelector++
+		}
+		if affinityExplanation.NodeAffinity != nil && !affinityExplanation.NodeAffinity.RequiredMatched {
+			summary.FilteredByNodeAffinity++
+		}
+	}
+
+	// Check taints and tolerations
+	taintsOk, taintExplanation := s.explainTaints(pod, node)
+	if !taintsOk {
+		schedulable = false
+		reasons.Taints = taintExplanation
+		summary.FilteredByTaints++
+	}
+
+	// Check pod affinity/anti-affinity
+	podAffinityOk, podAffinityExplanation := s.explainPodAffinity(ctx, pod, node)
+	if !podAffinityOk {
+		schedulable = false
+		reasons.PodAffinity = podAffinityExplanation
+		summary.FilteredByPodAffinity++
+	}
+
+	// Check volume constraints
+	if s.checkPodVolumes(pod) {
+		volumeOk, volumeExplanation := s.explainVolumeConstraints(ctx, pod, node)
+		if !volumeOk {
+			schedulable = false
+			reasons.Volume = volumeExplanation
+			summary.FilteredByVolume++
+		}
+	}
+
+	// Generate node-specific recommendation
+	recommendation := s.generateNodeRecommendation(node, reasons, recommendations)
+
+	return models.NodeSchedulingExplanation{
+		NodeName:       node.Name,
+		Schedulable:    schedulable,
+		Reasons:        reasons,
+		Recommendation: recommendation,
+	}
+}
+
+func (s *podService) explainNodeReady(node *v1.Node) (bool, *models.NodeReadyExplanation) {
+	explanation := &models.NodeReadyExplanation{
+		Ready:      true,
+		Conditions: []string{},
+	}
+
+	if node.Spec.Unschedulable {
+		explanation.Ready = false
+		explanation.Conditions = append(explanation.Conditions, "Node is marked as unschedulable")
+	}
+
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady {
+			if condition.Status != v1.ConditionTrue {
+				explanation.Ready = false
+				explanation.Conditions = append(explanation.Conditions,
+					fmt.Sprintf("NodeReady condition is %s: %s", condition.Status, condition.Message))
+			}
+		} else if condition.Status != v1.ConditionFalse {
+			// Other conditions should be False for a healthy node
+			explanation.Conditions = append(explanation.Conditions,
+				fmt.Sprintf("%s condition is %s: %s", condition.Type, condition.Status, condition.Message))
+		}
+	}
+
+	return explanation.Ready, explanation
+}
+
+func (s *podService) explainResourceFit(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, *models.ResourceExplanation) {
+	// Calculate pod resource requests
+	podCPURequest := resource.NewQuantity(0, resource.DecimalSI)
+	podMemoryRequest := resource.NewQuantity(0, resource.BinarySI)
+	podStorageRequest := resource.NewQuantity(0, resource.BinarySI)
+
+	for i := range pod.Spec.Containers {
+		container := &pod.Spec.Containers[i]
+		if cpuReq, ok := container.Resources.Requests[v1.ResourceCPU]; ok {
+			podCPURequest.Add(cpuReq)
+		}
+		if memReq, ok := container.Resources.Requests[v1.ResourceMemory]; ok {
+			podMemoryRequest.Add(memReq)
+		}
+		if storageReq, ok := container.Resources.Requests[v1.ResourceEphemeralStorage]; ok {
+			podStorageRequest.Add(storageReq)
+		}
+	}
+
+	// Get node allocatable resources
+	nodeCPUAllocatable := node.Status.Allocatable[v1.ResourceCPU]
+	nodeMemoryAllocatable := node.Status.Allocatable[v1.ResourceMemory]
+	nodeStorageAllocatable := node.Status.Allocatable[v1.ResourceEphemeralStorage]
+
+	// Calculate currently allocated resources on the node
+	nodeAllocated, err := s.calculateNodeAllocatedResources(ctx, node)
+	if err != nil {
+		s.logger.Warn("failed to calculate node allocated resources",
+			"node", node.Name,
+			"error", err.Error())
+		// Continue with partial analysis
+	}
+
+	explanation := &models.ResourceExplanation{
+		Fits:    true,
+		Details: make(map[string]models.ResourceDetail),
+	}
+
+	// Check CPU
+	cpuDetail := s.analyzeResourceDetail("cpu", *podCPURequest,
+		node.Status.Capacity[v1.ResourceCPU], nodeCPUAllocatable,
+		nodeAllocated[v1.ResourceCPU])
+	if cpuDetail.Shortage != "" {
+		explanation.Fits = false
+	}
+	explanation.Details["cpu"] = cpuDetail
+
+	// Check Memory
+	memoryDetail := s.analyzeResourceDetail("memory", *podMemoryRequest,
+		node.Status.Capacity[v1.ResourceMemory], nodeMemoryAllocatable,
+		nodeAllocated[v1.ResourceMemory])
+	if memoryDetail.Shortage != "" {
+		explanation.Fits = false
+	}
+	explanation.Details["memory"] = memoryDetail
+
+	// Check Storage if requested
+	if !podStorageRequest.IsZero() {
+		storageDetail := s.analyzeResourceDetail("ephemeral-storage", *podStorageRequest,
+			node.Status.Capacity[v1.ResourceEphemeralStorage], nodeStorageAllocatable,
+			nodeAllocated[v1.ResourceEphemeralStorage])
+		if storageDetail.Shortage != "" {
+			explanation.Fits = false
+		}
+		explanation.Details["ephemeral-storage"] = storageDetail
+	}
+
+	// Generate summary
+	if !explanation.Fits {
+		shortages := []string{}
+		for resource, detail := range explanation.Details {
+			if detail.Shortage != "" {
+				shortages = append(shortages, fmt.Sprintf("%s: %s", resource, detail.Shortage))
+			}
+		}
+		explanation.Summary = fmt.Sprintf("Insufficient resources: %s", strings.Join(shortages, ", "))
+	}
+
+	return explanation.Fits, explanation
+}
+
+func (s *podService) calculateNodeAllocatedResources(ctx context.Context, node *v1.Node) (v1.ResourceList, error) {
+	allocated := v1.ResourceList{
+		v1.ResourceCPU:              *resource.NewQuantity(0, resource.DecimalSI),
+		v1.ResourceMemory:           *resource.NewQuantity(0, resource.BinarySI),
+		v1.ResourceEphemeralStorage: *resource.NewQuantity(0, resource.BinarySI),
+	}
+
+	// List all pods on the node
+	podList, err := s.k8sClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("spec.nodeName=%s", node.Name),
+	})
+	if err != nil {
+		return allocated, fmt.Errorf("failed to list pods on node %s: %w", node.Name, err)
+	}
+
+	// Sum up resource requests from all pods
+	for i := range podList.Items {
+		pod := &podList.Items[i]
+		// Skip terminated pods
+		if pod.Status.Phase == v1.PodSucceeded || pod.Status.Phase == v1.PodFailed {
+			continue
+		}
+
+		for j := range pod.Spec.Containers {
+			container := &pod.Spec.Containers[j]
+			if cpuReq, ok := container.Resources.Requests[v1.ResourceCPU]; ok {
+				cpuQty := allocated[v1.ResourceCPU]
+				cpuQty.Add(cpuReq)
+				allocated[v1.ResourceCPU] = cpuQty
+			}
+			if memReq, ok := container.Resources.Requests[v1.ResourceMemory]; ok {
+				memQty := allocated[v1.ResourceMemory]
+				memQty.Add(memReq)
+				allocated[v1.ResourceMemory] = memQty
+			}
+			if storageReq, ok := container.Resources.Requests[v1.ResourceEphemeralStorage]; ok {
+				storageQty := allocated[v1.ResourceEphemeralStorage]
+				storageQty.Add(storageReq)
+				allocated[v1.ResourceEphemeralStorage] = storageQty
+			}
+		}
+	}
+
+	return allocated, nil
+}
+
+func (s *podService) analyzeResourceDetail(resourceName string, podRequest, nodeCapacity, nodeAllocatable, nodeAllocated resource.Quantity) models.ResourceDetail {
+	available := nodeAllocatable.DeepCopy()
+	available.Sub(nodeAllocated)
+
+	detail := models.ResourceDetail{
+		PodRequests:     podRequest.String(),
+		NodeCapacity:    nodeCapacity.String(),
+		NodeAllocatable: nodeAllocatable.String(),
+		NodeAllocated:   nodeAllocated.String(),
+		NodeAvailable:   available.String(),
+	}
+
+	// Calculate percentage used
+	if !nodeAllocatable.IsZero() {
+		percentUsed := float64(nodeAllocated.MilliValue()) / float64(nodeAllocatable.MilliValue()) * 100
+		detail.PercentUsed = math.Round(percentUsed*100) / 100 // Round to 2 decimal places
+	}
+
+	// Check if pod fits
+	if podRequest.Cmp(available) > 0 {
+		shortage := podRequest.DeepCopy()
+		shortage.Sub(available)
+		detail.Shortage = shortage.String()
+		detail.Recommendation = fmt.Sprintf("Pod needs %s more %s than available on this node", shortage.String(), resourceName)
+	}
+
+	return detail
+}
+
+func (s *podService) explainAffinity(pod *v1.Pod, node *v1.Node) (bool, *models.AffinityExplanation) {
+	explanation := &models.AffinityExplanation{}
+	matched := true
+
+	// Check node selector
+	if len(pod.Spec.NodeSelector) > 0 {
+		selectorExplanation := &models.SelectorExplanation{
+			Matched:       true,
+			Required:      pod.Spec.NodeSelector,
+			NodeLabels:    node.Labels,
+			MissingLabels: []string{},
+		}
+
+		for key, value := range pod.Spec.NodeSelector {
+			if nodeValue, exists := node.Labels[key]; !exists || nodeValue != value {
+				selectorExplanation.Matched = false
+				matched = false
+				selectorExplanation.MissingLabels = append(selectorExplanation.MissingLabels,
+					fmt.Sprintf("%s=%s", key, value))
+			}
+		}
+
+		if !selectorExplanation.Matched {
+			selectorExplanation.Details = fmt.Sprintf("Node selector requirements not met. Missing labels: %s",
+				strings.Join(selectorExplanation.MissingLabels, ", "))
+		}
+
+		explanation.NodeSelector = selectorExplanation
+	}
+
+	// Check node affinity
+	if pod.Spec.Affinity != nil && pod.Spec.Affinity.NodeAffinity != nil {
+		affinityDetail := &models.NodeAffinityDetail{
+			RequiredMatched: true,
+			FailedTerms:     []string{},
+		}
+
+		if required := pod.Spec.Affinity.NodeAffinity.RequiredDuringSchedulingIgnoredDuringExecution; required != nil {
+			affinityDetail.RequiredMatched = false
+			for _, term := range required.NodeSelectorTerms {
+				if s.matchNodeSelectorTerm(node, term) {
+					affinityDetail.RequiredMatched = true
+					break
+				} else {
+					affinityDetail.FailedTerms = append(affinityDetail.FailedTerms,
+						s.explainNodeSelectorTerm(term, node))
+				}
+			}
+
+			if !affinityDetail.RequiredMatched {
+				matched = false
+				affinityDetail.Details = "No required node affinity terms matched this node"
+			}
+		}
+
+		explanation.NodeAffinity = affinityDetail
+	}
+
+	if !matched {
+		explanation.Summary = "Node affinity requirements not satisfied"
+	}
+
+	return matched, explanation
+}
+
+func (s *podService) explainNodeSelectorTerm(term v1.NodeSelectorTerm, node *v1.Node) string {
+	failures := []string{}
+
+	for _, expr := range term.MatchExpressions {
+		if !s.matchNodeSelectorRequirement(node, expr) {
+			failures = append(failures, fmt.Sprintf("label %s %s %v",
+				expr.Key, expr.Operator, expr.Values))
+		}
+	}
+
+	for _, field := range term.MatchFields {
+		if !s.matchNodeFieldSelector(node, field) {
+			failures = append(failures, fmt.Sprintf("field %s %s %v",
+				field.Key, field.Operator, field.Values))
+		}
+	}
+
+	return strings.Join(failures, " AND ")
+}
+
+func (s *podService) explainTaints(pod *v1.Pod, node *v1.Node) (bool, *models.TaintExplanation) {
+	explanation := &models.TaintExplanation{
+		Tolerated:         true,
+		NodeTaints:        []models.TaintInfo{},
+		PodTolerations:    []string{},
+		UntoleratedTaints: []models.TaintInfo{},
+	}
+
+	// Convert node taints to TaintInfo
+	for _, taint := range node.Spec.Taints {
+		explanation.NodeTaints = append(explanation.NodeTaints, models.TaintInfo{
+			Key:    taint.Key,
+			Value:  taint.Value,
+			Effect: string(taint.Effect),
+		})
+	}
+
+	// Convert pod tolerations to strings
+	for _, toleration := range pod.Spec.Tolerations {
+		tolStr := fmt.Sprintf("key=%s", toleration.Key)
+		if toleration.Value != "" {
+			tolStr += fmt.Sprintf(",value=%s", toleration.Value)
+		}
+		if toleration.Effect != "" {
+			tolStr += fmt.Sprintf(",effect=%s", toleration.Effect)
+		}
+		if toleration.Operator != "" {
+			tolStr += fmt.Sprintf(",operator=%s", toleration.Operator)
+		}
+		explanation.PodTolerations = append(explanation.PodTolerations, tolStr)
+	}
+
+	// Check untolerated taints
+	for _, taint := range node.Spec.Taints {
+		tolerated := false
+		for _, toleration := range pod.Spec.Tolerations {
+			if s.tolerationMatchesTaint(toleration, taint) {
+				tolerated = true
+				break
+			}
+		}
+		if !tolerated && (taint.Effect == v1.TaintEffectNoSchedule || taint.Effect == v1.TaintEffectNoExecute) {
+			explanation.Tolerated = false
+			explanation.UntoleratedTaints = append(explanation.UntoleratedTaints, models.TaintInfo{
+				Key:    taint.Key,
+				Value:  taint.Value,
+				Effect: string(taint.Effect),
+			})
+		}
+	}
+
+	if !explanation.Tolerated {
+		taintStrs := []string{}
+		for _, taint := range explanation.UntoleratedTaints {
+			taintStrs = append(taintStrs, fmt.Sprintf("%s=%s:%s", taint.Key, taint.Value, taint.Effect))
+		}
+		explanation.Details = fmt.Sprintf("Pod does not tolerate taints: %s", strings.Join(taintStrs, ", "))
+	}
+
+	return explanation.Tolerated, explanation
+}
+
+func (s *podService) explainPodAffinity(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, *models.PodAffinityExplanation) {
+	explanation := &models.PodAffinityExplanation{
+		Satisfied: true,
+	}
+
+	if pod.Spec.Affinity == nil {
+		return true, explanation
+	}
+
+	// Get all pods on the node
+	podList, err := s.k8sClient.CoreV1().Pods("").List(ctx, metav1.ListOptions{
+		FieldSelector: fmt.Sprintf("spec.nodeName=%s", node.Name),
+	})
+	if err != nil {
+		s.logger.Warn("failed to list pods for affinity check",
+			"node", node.Name,
+			"error", err.Error())
+		return true, explanation
+	}
+
+	// Check pod anti-affinity
+	if pod.Spec.Affinity.PodAntiAffinity != nil {
+		for _, term := range pod.Spec.Affinity.PodAntiAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
+			for j := range podList.Items {
+				existingPod := &podList.Items[j]
+				if existingPod.Name == pod.Name && existingPod.Namespace == pod.Namespace {
+					continue // Skip self
+				}
+				if s.podMatchesAntiAffinityTerm(existingPod, term) {
+					explanation.Satisfied = false
+					explanation.AntiAffinityFailed = append(explanation.AntiAffinityFailed,
+						fmt.Sprintf("%s/%s", existingPod.Namespace, existingPod.Name))
+				}
+			}
+		}
+	}
+
+	// Check pod affinity
+	if pod.Spec.Affinity.PodAffinity != nil {
+		for _, term := range pod.Spec.Affinity.PodAffinity.RequiredDuringSchedulingIgnoredDuringExecution {
+			matched := false
+			for j := range podList.Items {
+				existingPod := &podList.Items[j]
+				if s.podMatchesAffinityTerm(existingPod, term) {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				explanation.Satisfied = false
+				explanation.RequiredNotMet = append(explanation.RequiredNotMet,
+					"No pods matching required affinity term found on node")
+			}
+		}
+	}
+
+	if !explanation.Satisfied {
+		details := []string{}
+		if len(explanation.AntiAffinityFailed) > 0 {
+			details = append(details, fmt.Sprintf("anti-affinity conflicts with pods: %s",
+				strings.Join(explanation.AntiAffinityFailed, ", ")))
+		}
+		if len(explanation.RequiredNotMet) > 0 {
+			details = append(details, strings.Join(explanation.RequiredNotMet, "; "))
+		}
+		explanation.Details = strings.Join(details, "; ")
+	}
+
+	return explanation.Satisfied, explanation
+}
+
+func (s *podService) podMatchesAffinityTerm(pod *v1.Pod, term v1.PodAffinityTerm) bool {
+	// Same logic as podMatchesAntiAffinityTerm but for affinity
+	return s.podMatchesAntiAffinityTerm(pod, term)
+}
+
+func (s *podService) explainVolumeConstraints(ctx context.Context, pod *v1.Pod, node *v1.Node) (bool, *models.VolumeExplanation) {
+	explanation := &models.VolumeExplanation{
+		Satisfied: true,
+		Issues:    []string{},
+	}
+
+	for _, volume := range pod.Spec.Volumes {
+		if volume.PersistentVolumeClaim == nil {
+			continue
+		}
+
+		pvc, err := s.k8sClient.CoreV1().PersistentVolumeClaims(pod.Namespace).Get(
+			ctx, volume.PersistentVolumeClaim.ClaimName, metav1.GetOptions{})
+		if err != nil {
+			explanation.Issues = append(explanation.Issues,
+				fmt.Sprintf("Failed to get PVC %s: %v", volume.PersistentVolumeClaim.ClaimName, err))
+			continue
+		}
+
+		if pvc.Status.Phase != v1.ClaimBound {
+			explanation.Satisfied = false
+			explanation.Issues = append(explanation.Issues,
+				fmt.Sprintf("PVC %s is not bound (status: %s)", pvc.Name, pvc.Status.Phase))
+			continue
+		}
+
+		if pvc.Spec.VolumeName != "" {
+			pv, err := s.k8sClient.CoreV1().PersistentVolumes().Get(ctx, pvc.Spec.VolumeName, metav1.GetOptions{})
+			if err != nil {
+				explanation.Issues = append(explanation.Issues,
+					fmt.Sprintf("Failed to get PV %s: %v", pvc.Spec.VolumeName, err))
+				continue
+			}
+
+			// Check node affinity for volume
+			if pv.Spec.NodeAffinity != nil && pv.Spec.NodeAffinity.Required != nil {
+				matches := false
+				for _, term := range pv.Spec.NodeAffinity.Required.NodeSelectorTerms {
+					if s.matchNodeSelectorTerm(node, term) {
+						matches = true
+						break
+					}
+				}
+				if !matches {
+					explanation.Satisfied = false
+					explanation.Issues = append(explanation.Issues,
+						fmt.Sprintf("PV %s has node affinity that doesn't match node %s", pv.Name, node.Name))
+				}
+			}
+
+			// Check for ReadWriteOnce access mode issues
+			if hasAccessMode(pvc.Status.AccessModes, v1.ReadWriteOnce) {
+				// Could check if volume is already attached to another node
+				explanation.Issues = append(explanation.Issues,
+					fmt.Sprintf("PVC %s has ReadWriteOnce access mode (potential multi-attach issue)", pvc.Name))
+			}
+		}
+	}
+
+	if !explanation.Satisfied {
+		explanation.Details = fmt.Sprintf("Volume constraints not satisfied: %s",
+			strings.Join(explanation.Issues, "; "))
+	}
+
+	return explanation.Satisfied, explanation
+}
+
+func hasAccessMode(modes []v1.PersistentVolumeAccessMode, mode v1.PersistentVolumeAccessMode) bool {
+	for _, m := range modes {
+		if m == mode {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *podService) generateNodeRecommendation(node *v1.Node, reasons models.NodeSchedulingReasons, recommendations []string) string {
+	if len(recommendations) > 0 {
+		return strings.Join(recommendations, "; ")
+	}
+
+	issues := []string{}
+
+	if reasons.NodeReady != nil && !reasons.NodeReady.Ready {
+		issues = append(issues, "node not ready")
+	}
+
+	if reasons.Resources != nil && !reasons.Resources.Fits {
+		shortages := []string{}
+		for resource, detail := range reasons.Resources.Details {
+			if detail.Shortage != "" {
+				shortages = append(shortages, fmt.Sprintf("%s %s", detail.Shortage, resource))
+			}
+		}
+		if len(shortages) > 0 {
+			issues = append(issues, fmt.Sprintf("needs %s", strings.Join(shortages, ", ")))
+		}
+	}
+
+	if reasons.Affinity != nil {
+		if reasons.Affinity.NodeSelector != nil && !reasons.Affinity.NodeSelector.Matched {
+			issues = append(issues, "node selector mismatch")
+		}
+		if reasons.Affinity.NodeAffinity != nil && !reasons.Affinity.NodeAffinity.RequiredMatched {
+			issues = append(issues, "node affinity mismatch")
+		}
+	}
+
+	if reasons.Taints != nil && !reasons.Taints.Tolerated {
+		issues = append(issues, fmt.Sprintf("%d untolerated taints", len(reasons.Taints.UntoleratedTaints)))
+	}
+
+	if reasons.PodAffinity != nil && !reasons.PodAffinity.Satisfied {
+		issues = append(issues, "pod affinity conflict")
+	}
+
+	if reasons.Volume != nil && !reasons.Volume.Satisfied {
+		issues = append(issues, "volume constraints")
+	}
+
+	if len(issues) == 0 {
+		return "Node is schedulable for this pod"
+	}
+
+	return fmt.Sprintf("Node cannot schedule pod due to: %s", strings.Join(issues, ", "))
+}
+
+func (s *podService) generateSchedulingRecommendation(pod *v1.Pod, nodeAnalysis []models.NodeSchedulingExplanation, events []models.SchedulingEvent) string {
+	if pod.Spec.NodeName != "" {
+		return fmt.Sprintf("Pod is already scheduled on node %s", pod.Spec.NodeName)
+	}
+
+	// Count issues
+	resourceIssues := 0
+	affinityIssues := 0
+	taintIssues := 0
+	nodeReadyIssues := 0
+	volumeIssues := 0
+
+	for _, analysis := range nodeAnalysis {
+		if analysis.Reasons.Resources != nil && !analysis.Reasons.Resources.Fits {
+			resourceIssues++
+		}
+		if analysis.Reasons.Affinity != nil {
+			affinityIssues++
+		}
+		if analysis.Reasons.Taints != nil && !analysis.Reasons.Taints.Tolerated {
+			taintIssues++
+		}
+		if analysis.Reasons.NodeReady != nil && !analysis.Reasons.NodeReady.Ready {
+			nodeReadyIssues++
+		}
+		if analysis.Reasons.Volume != nil && !analysis.Reasons.Volume.Satisfied {
+			volumeIssues++
+		}
+	}
+
+	// Generate recommendation based on most common issue
+	if resourceIssues == len(nodeAnalysis) {
+		return "No nodes have sufficient resources. Consider scaling up the cluster or reducing pod resource requests."
+	}
+
+	if affinityIssues == len(nodeAnalysis) {
+		return "No nodes match the pod's affinity requirements. Review node labels and affinity rules."
+	}
+
+	if taintIssues > 0 && taintIssues == len(nodeAnalysis)-nodeReadyIssues {
+		return "All available nodes have taints that the pod doesn't tolerate. Add appropriate tolerations to the pod."
+	}
+
+	// Parse events for additional context
+	for _, event := range events {
+		if event.Reason == "FailedScheduling" {
+			categories := s.parseFailedSchedulingMessage(event.Message)
+			if len(categories) > 0 {
+				return fmt.Sprintf("Scheduling failed: %s. See node analysis for details.", event.Message)
+			}
+		}
+	}
+
+	return "Pod cannot be scheduled. Review the detailed node analysis above for specific issues on each node."
+}
+
+func (s *podService) generatePossibleActions(pod *v1.Pod, nodeAnalysis []models.NodeSchedulingExplanation, events []models.SchedulingEvent) []string {
+	actions := []string{}
+	actionSet := make(map[string]bool)
+
+	// Analyze common issues across nodes
+	for _, analysis := range nodeAnalysis {
+		// Resource issues
+		if analysis.Reasons.Resources != nil && !analysis.Reasons.Resources.Fits {
+			for resource, detail := range analysis.Reasons.Resources.Details {
+				if detail.Shortage != "" {
+					action := fmt.Sprintf("Reduce pod %s request by at least %s", resource, detail.Shortage)
+					actionSet[action] = true
+				}
+			}
+			actionSet["Scale up cluster by adding more nodes"] = true
+			actionSet["Enable cluster autoscaler if not already enabled"] = true
+		}
+
+		// Affinity issues
+		if analysis.Reasons.Affinity != nil {
+			if analysis.Reasons.Affinity.NodeSelector != nil && !analysis.Reasons.Affinity.NodeSelector.Matched {
+				actionSet["Remove or modify node selector requirements"] = true
+				actionSet["Label nodes to match selector requirements"] = true
+			}
+			if analysis.Reasons.Affinity.NodeAffinity != nil && !analysis.Reasons.Affinity.NodeAffinity.RequiredMatched {
+				actionSet["Modify node affinity rules to be less restrictive"] = true
+				actionSet["Add nodes that match affinity requirements"] = true
+			}
+		}
+
+		// Taint issues
+		if analysis.Reasons.Taints != nil && !analysis.Reasons.Taints.Tolerated {
+			actionSet["Add tolerations for node taints to the pod spec"] = true
+			actionSet["Remove taints from nodes if appropriate"] = true
+		}
+
+		// Volume issues
+		if analysis.Reasons.Volume != nil && !analysis.Reasons.Volume.Satisfied {
+			actionSet["Ensure PVCs are bound and available"] = true
+			actionSet["Check volume node affinity matches available nodes"] = true
+			actionSet["Consider using different storage class or access modes"] = true
+		}
+	}
+
+	// Convert set to slice
+	for action := range actionSet {
+		actions = append(actions, action)
+	}
+
+	// Sort for consistent output
+	sort.Strings(actions)
+
+	return actions
 }

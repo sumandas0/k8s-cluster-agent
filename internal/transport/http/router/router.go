@@ -31,6 +31,7 @@ func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
 			r.Get("/scheduling", podHandlers.GetPodScheduling)
 			r.Get("/resources", podHandlers.GetPodResources)
 			r.Get("/failure-events", podHandlers.GetPodFailureEvents)
+			r.Get("/scheduling/explain", podHandlers.GetPodSchedulingExplanation)
 		})
 
 		r.Get("/nodes/{nodeName}/utilization", nodeHandlers.GetNodeUtilization)

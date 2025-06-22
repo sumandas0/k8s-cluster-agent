@@ -153,6 +153,37 @@ func (h *PodHandlers) GetPodFailureEvents(w http.ResponseWriter, r *http.Request
 	responses.WriteJSON(w, responses.Success(failureEvents))
 }
 
+func (h *PodHandlers) GetPodSchedulingExplanation(w http.ResponseWriter, r *http.Request) {
+	namespace := chi.URLParam(r, "namespace")
+	podName := chi.URLParam(r, "podName")
+	requestID := middleware.GetReqID(r.Context())
+
+	if err := validatePodParams(namespace, podName); err != nil {
+		h.logger.Warn("invalid pod scheduling explanation request",
+			"namespace", namespace,
+			"pod", podName,
+			"error", err.Error(),
+			"request_id", requestID,
+		)
+		responses.WriteBadRequest(w, err)
+		return
+	}
+
+	explanation, err := h.podService.GetPodSchedulingExplanation(r.Context(), namespace, podName)
+	if err != nil {
+		h.handleServiceError(w, r, err, "failed to get pod scheduling explanation", namespace, podName)
+		return
+	}
+
+	h.logger.Debug("pod scheduling explanation request successful",
+		"namespace", namespace,
+		"pod", podName,
+		"request_id", requestID,
+	)
+
+	responses.WriteJSON(w, responses.Success(explanation))
+}
+
 func validatePodParams(namespace, podName string) error {
 	if namespace == "" {
 		return fmt.Errorf("namespace is required")

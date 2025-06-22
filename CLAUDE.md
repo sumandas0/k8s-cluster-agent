@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 The K8s Cluster Agent is a lightweight, read-only Kubernetes service that runs inside a cluster and provides a RESTful API for querying pod and node information. It follows clean architecture principles with clear separation between transport, business logic, and Kubernetes client layers.
 
 ## Common Development Commands
+- Don't add any comments
 
 ### Building and Running
 ```bash
@@ -57,6 +58,7 @@ make tidy             # Clean up go.mod dependencies
 - `GET /api/v1/pods/{namespace}/{podName}/scheduling` - Enhanced scheduling info with failure analysis
 - `GET /api/v1/pods/{namespace}/{podName}/resources` - Resource requirements
 - `GET /api/v1/pods/{namespace}/{podName}/failure-events` - Analyzed failure events with insights
+- `GET /api/v1/pods/{namespace}/{podName}/scheduling/explain` - Detailed scheduling explanation (like Elasticsearch's allocation explain)
 - `GET /api/v1/nodes/{nodeName}/utilization` - Node metrics (requires metrics server)
 
 #### Enhanced Scheduling API
@@ -98,6 +100,75 @@ Example response structure for pending pod:
       "insufficientResources": ["insufficient memory (requested: 2Gi, allocatable: 1Gi)"]
     }
   ]
+}
+```
+
+#### Scheduling Explain API
+The `/scheduling/explain` endpoint provides Elasticsearch-style detailed explanations for pod scheduling decisions:
+
+**Features:**
+- Per-node detailed analysis showing exactly why a pod can/cannot be scheduled
+- Resource calculations with exact numbers:
+  - Node capacity, allocatable, currently allocated, and available resources
+  - Exact shortage amounts when pod doesn't fit
+  - Percentage utilization for each resource type
+- Detailed affinity/anti-affinity explanations:
+  - Which labels are missing for node selectors
+  - Which node affinity terms failed and why
+  - Pod affinity/anti-affinity conflicts with specific pods
+- Taint/toleration analysis with specific recommendations
+- Volume constraint checks including PV node affinity
+- Actionable recommendations for resolving scheduling issues
+
+Example response structure:
+```json
+{
+  "podName": "my-pod",
+  "namespace": "default",
+  "status": "Pending",
+  "nodeAnalysis": [
+    {
+      "nodeName": "node-1",
+      "schedulable": false,
+      "reasons": {
+        "resources": {
+          "fits": false,
+          "details": {
+            "cpu": {
+              "podRequests": "2000m",
+              "nodeCapacity": "8000m",
+              "nodeAllocatable": "7820m",
+              "nodeAllocated": "6500m",
+              "nodeAvailable": "1320m",
+              "shortage": "680m",
+              "percentUsed": 83.12,
+              "recommendation": "Pod needs 680m more cpu than available on this node"
+            }
+          }
+        },
+        "affinity": {
+          "nodeSelector": {
+            "matched": false,
+            "required": {"zone": "us-west-1"},
+            "missingLabels": ["zone=us-west-1"],
+            "details": "Node selector requirements not met. Missing labels: zone=us-west-1"
+          }
+        }
+      },
+      "recommendation": "Node cannot schedule pod due to: needs 680m cpu, node selector mismatch"
+    }
+  ],
+  "summary": {
+    "totalNodes": 10,
+    "filteredByResources": 8,
+    "filteredByNodeSelector": 2,
+    "recommendation": "No nodes have sufficient resources. Consider scaling up the cluster or reducing pod resource requests.",
+    "possibleActions": [
+      "Reduce pod cpu request by at least 680m",
+      "Scale up cluster by adding more nodes",
+      "Enable cluster autoscaler if not already enabled"
+    ]
+  }
 }
 ```
 

@@ -18,6 +18,8 @@ type PodService interface {
 	GetPodResources(ctx context.Context, namespace, name string) (*models.PodResources, error)
 
 	GetPodFailureEvents(ctx context.Context, namespace, name string) (*models.PodFailureEvents, error)
+
+	GetPodSchedulingExplanation(ctx context.Context, namespace, name string) (*models.SchedulingExplanation, error)
 }
 
 type NodeService interface {
