@@ -10,6 +10,10 @@ GOFLAGS=-v
 build:
 	$(GO) build $(GOFLAGS) -o bin/$(BINARY_NAME) ./cmd/agent
 
+# Build with generated docs (for Docker)
+.PHONY: build-with-docs
+build-with-docs: generate-openapi build
+
 # Run tests
 .PHONY: test
 test:

@@ -4,7 +4,7 @@
 
 # Documentation
 README.md
-docs/
+# Keep docs directory for swagger generation
 
 # Development files
 .github/
