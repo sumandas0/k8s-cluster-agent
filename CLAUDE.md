@@ -334,7 +334,7 @@ Environment variables control behavior:
 - Request timeout fixed at 500ms for high performance
 
 ### Security Considerations
-- ServiceAccount with minimal RBAC (get/list pods, get nodes/metrics)
+- ServiceAccount with minimal RBAC (get/list pods, get/list nodes, get nodes/metrics, get/list events)
 - Container runs as non-root user (65534)
 - Read-only root filesystem
 - No privilege escalation, all capabilities dropped

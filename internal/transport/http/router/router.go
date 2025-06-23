@@ -20,7 +20,7 @@ func NewRouter(services *core.Services, logger *slog.Logger) chi.Router {
 	r.Use(middleware.RealIP)
 	r.Use(customMiddleware.RecoveryMiddleware(logger))
 	r.Use(customMiddleware.LoggingMiddleware(logger))
-	r.Use(customMiddleware.TimeoutMiddleware(500 * time.Millisecond))
+	r.Use(customMiddleware.TimeoutMiddleware(5 * time.Second))
 
 	podHandlers := handlers.NewPodHandlers(services.Pod, logger)
 	nodeHandlers := handlers.NewNodeHandlers(services.Node, logger)

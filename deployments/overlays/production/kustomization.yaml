@@ -1,11 +1,8 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-bases:
-  - ../../base
-
 resources:
+  - ../../base
   - networkpolicy.yaml
 
-# Note: HPA removed as DaemonSets don't support horizontal pod autoscaling
-# DaemonSets automatically run one pod per node 
+ 
