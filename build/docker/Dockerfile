@@ -23,7 +23,7 @@ COPY . .
 RUN swag init -g cmd/agent/main.go -o docs --parseInternal --parseDependency || true
 
 # Build the binary using make
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 make build
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o bin/k8s-cluster-agent ./cmd/agent
 
 # Move binary to expected location
 RUN mv bin/k8s-cluster-agent .

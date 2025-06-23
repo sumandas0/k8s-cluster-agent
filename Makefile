@@ -34,6 +34,10 @@ lint:
 docker-build:
 	docker build -f build/docker/Dockerfile -t $(DOCKER_IMAGE):$(VERSION) .
 
+.PHONY: podman-build
+podman-build:
+	podman build -f build/docker/Dockerfile -t $(DOCKER_IMAGE):$(VERSION) .
+
 # Push Docker image
 .PHONY: docker-push
 docker-push:
