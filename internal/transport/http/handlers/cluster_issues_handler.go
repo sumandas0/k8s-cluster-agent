@@ -82,4 +82,3 @@ func (h *ClusterIssuesHandler) handleServiceError(w http.ResponseWriter, r *http
 		responses.WriteInternalError(w, "Internal server error")
 	}
 }
-

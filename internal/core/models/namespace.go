@@ -7,13 +7,13 @@ import (
 type PodIssueType string
 
 const (
-	PodIssueHighRestarts PodIssueType = "HighRestarts"
-	PodIssuePending PodIssueType = "Pending"
-	PodIssueFailed PodIssueType = "Failed"
-	PodIssueCrashLoop PodIssueType = "CrashLoopBackOff"
-	PodIssueImagePull PodIssueType = "ImagePullError"
+	PodIssueHighRestarts        PodIssueType = "HighRestarts"
+	PodIssuePending             PodIssueType = "Pending"
+	PodIssueFailed              PodIssueType = "Failed"
+	PodIssueCrashLoop           PodIssueType = "CrashLoopBackOff"
+	PodIssueImagePull           PodIssueType = "ImagePullError"
 	PodIssueResourceConstraints PodIssueType = "ResourceConstraints"
-	PodIssueUnschedulable PodIssueType = "Unschedulable"
+	PodIssueUnschedulable       PodIssueType = "Unschedulable"
 )
 
 type PodIssue struct {
@@ -56,4 +56,3 @@ type NamespaceErrorReport struct {
 	CriticalIssuesCount  int                     `json:"criticalIssuesCount"`
 	WarningIssuesCount   int                     `json:"warningIssuesCount"`
 }
-

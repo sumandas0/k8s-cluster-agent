@@ -69,4 +69,3 @@ func (h *PodHealthScore) GetHealthStatus() string {
 		return "Critical"
 	}
 }
-

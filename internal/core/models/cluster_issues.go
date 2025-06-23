@@ -88,4 +88,3 @@ const (
 	TrendStable    = "stable"
 	TrendDegrading = "degrading"
 )
-

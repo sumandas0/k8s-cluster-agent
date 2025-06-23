@@ -67,7 +67,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value

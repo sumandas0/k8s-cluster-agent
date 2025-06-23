@@ -364,4 +364,3 @@ func (s *namespaceService) formatDuration(d time.Duration) string {
 	}
 	return fmt.Sprintf("%dd", days)
 }
-

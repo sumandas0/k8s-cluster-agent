@@ -61,14 +61,7 @@ func (h *NamespaceHandlers) GetNamespaceErrors(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	response := responses.SuccessResponse{
-		Data: report,
-		Metadata: responses.Metadata{
-			RequestID: requestID,
-			Timestamp: report.AnalysisTime,
-		},
-	}
-	responses.WriteJSON(w, response)
+	responses.WriteJSON(w, responses.Success(report))
 
 	h.logger.Info("namespace error analysis served",
 		"namespace", namespace,
@@ -87,4 +80,3 @@ func validateNamespace(namespace string) error {
 	}
 	return nil
 }
-

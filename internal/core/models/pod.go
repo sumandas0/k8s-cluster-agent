@@ -189,13 +189,13 @@ type FailureEventCategory string
 
 const (
 	FailureEventCategoryScheduling FailureEventCategory = "Scheduling"
-	FailureEventCategoryImagePull FailureEventCategory = "ImagePull"
-	FailureEventCategoryCrash FailureEventCategory = "ContainerCrash"
-	FailureEventCategoryVolume FailureEventCategory = "Volume"
-	FailureEventCategoryResource FailureEventCategory = "Resource"
-	FailureEventCategoryProbe FailureEventCategory = "Probe"
-	FailureEventCategoryNetwork FailureEventCategory = "Network"
-	FailureEventCategoryOther FailureEventCategory = "Other"
+	FailureEventCategoryImagePull  FailureEventCategory = "ImagePull"
+	FailureEventCategoryCrash      FailureEventCategory = "ContainerCrash"
+	FailureEventCategoryVolume     FailureEventCategory = "Volume"
+	FailureEventCategoryResource   FailureEventCategory = "Resource"
+	FailureEventCategoryProbe      FailureEventCategory = "Probe"
+	FailureEventCategoryNetwork    FailureEventCategory = "Network"
+	FailureEventCategoryOther      FailureEventCategory = "Other"
 )
 
 type FailureEvent struct {
@@ -234,20 +234,20 @@ type SchedulingExplanation struct {
 }
 
 type NodeSchedulingExplanation struct {
-	NodeName          string                    `json:"nodeName"`
-	Schedulable       bool                      `json:"schedulable"`
-	Reasons           NodeSchedulingReasons     `json:"reasons"`
-	Score             int32                     `json:"score,omitempty"`
-	Recommendation    string                    `json:"recommendation,omitempty"`
+	NodeName       string                `json:"nodeName"`
+	Schedulable    bool                  `json:"schedulable"`
+	Reasons        NodeSchedulingReasons `json:"reasons"`
+	Score          int32                 `json:"score,omitempty"`
+	Recommendation string                `json:"recommendation,omitempty"`
 }
 
 type NodeSchedulingReasons struct {
-	NodeReady    *NodeReadyExplanation    `json:"nodeReady,omitempty"`
-	Resources    *ResourceExplanation     `json:"resources,omitempty"`
-	Affinity     *AffinityExplanation     `json:"affinity,omitempty"`
-	Taints       *TaintExplanation        `json:"taints,omitempty"`
-	PodAffinity  *PodAffinityExplanation  `json:"podAffinity,omitempty"`
-	Volume       *VolumeExplanation       `json:"volume,omitempty"`
+	NodeReady   *NodeReadyExplanation   `json:"nodeReady,omitempty"`
+	Resources   *ResourceExplanation    `json:"resources,omitempty"`
+	Affinity    *AffinityExplanation    `json:"affinity,omitempty"`
+	Taints      *TaintExplanation       `json:"taints,omitempty"`
+	PodAffinity *PodAffinityExplanation `json:"podAffinity,omitempty"`
+	Volume      *VolumeExplanation      `json:"volume,omitempty"`
 }
 
 type NodeReadyExplanation struct {
@@ -256,26 +256,26 @@ type NodeReadyExplanation struct {
 }
 
 type ResourceExplanation struct {
-	Fits    bool                          `json:"fits"`
-	Details map[string]ResourceDetail     `json:"details"`
-	Summary string                        `json:"summary,omitempty"`
+	Fits    bool                      `json:"fits"`
+	Details map[string]ResourceDetail `json:"details"`
+	Summary string                    `json:"summary,omitempty"`
 }
 
 type ResourceDetail struct {
-	PodRequests      string  `json:"podRequests"`
-	NodeCapacity     string  `json:"nodeCapacity"`
-	NodeAllocatable  string  `json:"nodeAllocatable"`
-	NodeAllocated    string  `json:"nodeAllocated"`
-	NodeAvailable    string  `json:"nodeAvailable"`
-	Shortage         string  `json:"shortage,omitempty"`
-	PercentUsed      float64 `json:"percentUsed"`
-	Recommendation   string  `json:"recommendation,omitempty"`
+	PodRequests     string  `json:"podRequests"`
+	NodeCapacity    string  `json:"nodeCapacity"`
+	NodeAllocatable string  `json:"nodeAllocatable"`
+	NodeAllocated   string  `json:"nodeAllocated"`
+	NodeAvailable   string  `json:"nodeAvailable"`
+	Shortage        string  `json:"shortage,omitempty"`
+	PercentUsed     float64 `json:"percentUsed"`
+	Recommendation  string  `json:"recommendation,omitempty"`
 }
 
 type AffinityExplanation struct {
-	NodeSelector      *SelectorExplanation   `json:"nodeSelector,omitempty"`
-	NodeAffinity      *NodeAffinityDetail    `json:"nodeAffinity,omitempty"`
-	Summary           string                 `json:"summary,omitempty"`
+	NodeSelector *SelectorExplanation `json:"nodeSelector,omitempty"`
+	NodeAffinity *NodeAffinityDetail  `json:"nodeAffinity,omitempty"`
+	Summary      string               `json:"summary,omitempty"`
 }
 
 type SelectorExplanation struct {
@@ -287,10 +287,10 @@ type SelectorExplanation struct {
 }
 
 type NodeAffinityDetail struct {
-	RequiredMatched  bool     `json:"requiredMatched"`
-	PreferredScore   int32    `json:"preferredScore,omitempty"`
-	FailedTerms      []string `json:"failedTerms,omitempty"`
-	Details          string   `json:"details,omitempty"`
+	RequiredMatched bool     `json:"requiredMatched"`
+	PreferredScore  int32    `json:"preferredScore,omitempty"`
+	FailedTerms     []string `json:"failedTerms,omitempty"`
+	Details         string   `json:"details,omitempty"`
 }
 
 type TaintExplanation struct {
@@ -310,20 +310,20 @@ type PodAffinityExplanation struct {
 }
 
 type VolumeExplanation struct {
-	Satisfied       bool     `json:"satisfied"`
-	Issues          []string `json:"issues,omitempty"`
-	Details         string   `json:"details,omitempty"`
+	Satisfied bool     `json:"satisfied"`
+	Issues    []string `json:"issues,omitempty"`
+	Details   string   `json:"details,omitempty"`
 }
 
 type SchedulingSummary struct {
-	TotalNodes               int      `json:"totalNodes"`
-	FilteredByNodeSelector   int      `json:"filteredByNodeSelector"`
-	FilteredByNodeAffinity   int      `json:"filteredByNodeAffinity"`
-	FilteredByTaints         int      `json:"filteredByTaints"`
-	FilteredByResources      int      `json:"filteredByResources"`
-	FilteredByPodAffinity    int      `json:"filteredByPodAffinity"`
-	FilteredByVolume         int      `json:"filteredByVolume"`
-	FilteredByNodeNotReady   int      `json:"filteredByNodeNotReady"`
-	Recommendation           string   `json:"recommendation"`
-	PossibleActions          []string `json:"possibleActions,omitempty"`
+	TotalNodes             int      `json:"totalNodes"`
+	FilteredByNodeSelector int      `json:"filteredByNodeSelector"`
+	FilteredByNodeAffinity int      `json:"filteredByNodeAffinity"`
+	FilteredByTaints       int      `json:"filteredByTaints"`
+	FilteredByResources    int      `json:"filteredByResources"`
+	FilteredByPodAffinity  int      `json:"filteredByPodAffinity"`
+	FilteredByVolume       int      `json:"filteredByVolume"`
+	FilteredByNodeNotReady int      `json:"filteredByNodeNotReady"`
+	Recommendation         string   `json:"recommendation"`
+	PossibleActions        []string `json:"possibleActions,omitempty"`
 }

@@ -6,9 +6,9 @@ import (
 	"time"
 )
 
-type SuccessResponse struct {
-	Data     interface{} `json:"data"`
-	Metadata Metadata    `json:"metadata"`
+type SuccessResponse[T any] struct {
+	Data     T        `json:"data"`
+	Metadata Metadata `json:"metadata"`
 }
 
 type Metadata struct {
@@ -16,8 +16,8 @@ type Metadata struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
-func Success(data interface{}) SuccessResponse {
-	return SuccessResponse{
+func Success[T any](data T) SuccessResponse[T] {
+	return SuccessResponse[T]{
 		Data: data,
 		Metadata: Metadata{
 			Timestamp: time.Now(),
@@ -25,7 +25,7 @@ func Success(data interface{}) SuccessResponse {
 	}
 }
 
-func WriteJSON(w http.ResponseWriter, response interface{}) {
+func WriteJSON[T any](w http.ResponseWriter, response T) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 
@@ -34,7 +34,7 @@ func WriteJSON(w http.ResponseWriter, response interface{}) {
 	}
 }
 
-func WriteJSONWithStatus(w http.ResponseWriter, status int, response interface{}) {
+func WriteJSONWithStatus[T any](w http.ResponseWriter, status int, response T) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 

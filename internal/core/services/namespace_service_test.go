@@ -272,7 +272,6 @@ func TestNamespaceService_analyzePod(t *testing.T) {
 	}
 }
 
-
 func createPod(namespace, name, ownerKind, phase string, _, restartCount int32) *v1.Pod {
 	pod := &v1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -373,4 +372,3 @@ func createMultiIssuePod(namespace, name, ownerKind string) *v1.Pod {
 	pod.Status.ContainerStatuses[0].RestartCount = 10
 	return pod
 }
-

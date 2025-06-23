@@ -99,4 +99,3 @@ func (h *HealthScoreHandler) handleServiceError(w http.ResponseWriter, r *http.R
 		responses.WriteInternalError(w, "Internal server error")
 	}
 }
-
