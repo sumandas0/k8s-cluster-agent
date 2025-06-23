@@ -21,7 +21,7 @@ spec:
         fsGroup: 65534
       containers:
       - name: agent
-        image: ghcr.io/sumandas0/k8s-cluster-agent:main-45d6325
+        image: ghcr.io/sumandas0/k8s-cluster-agent:main-24ec701
         imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 8080
